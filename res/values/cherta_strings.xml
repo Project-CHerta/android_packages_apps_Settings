@@ -229,4 +229,9 @@ Your phone’s battery will run out faster when using this feature. Battery Shar
     <string name="refresh_rate_vrr_summary">Automatically lower the refresh rate when the display is idle, to save power. May cause flickering or color shift on certain displays</string>
     <string name="refresh_rate_footer">A higher refresh rate makes the display smoother, but increases power consumption</string>
     <string name="keywords_refresh_rate">refresh, rate, smooth, peak, 60hz, 90hz, 120hz, 144hz, 165hz</string>
+
+    <!-- Volume dialog position -->
+    <string name="volume_panel_category_title">Volume panel</string>
+    <string name="volume_panel_on_left_title">Left volume panel</string>
+    <string name="volume_panel_on_left_summary">Show volume panel on the left side of the screen</string>
 </resources>
