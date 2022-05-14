@@ -200,4 +200,8 @@ Your phone’s battery will run out faster when using this feature. Battery Shar
     <!-- Keybox Data -->
     <string name="keybox_data_title">Select keybox XML to spoof</string>
     <string name="keybox_data_summary">Select a keybox XML for system-wide key attestation spoofing. Click the delete button to reset to default values</string>
+
+    <!-- Copy to clipboard -->
+    <string name="copied_to_clipboard">Copied to clipboard</string>
+    <string name="longpress_to_clipboard">Long-press to copy</string>
 </resources>
