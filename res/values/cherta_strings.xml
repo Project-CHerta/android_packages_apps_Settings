@@ -235,4 +235,11 @@ Your phone’s battery will run out faster when using this feature. Battery Shar
     <string name="volume_panel_category_title">Volume panel</string>
     <string name="volume_panel_on_left_title">Left volume panel</string>
     <string name="volume_panel_on_left_summary">Show volume panel on the left side of the screen</string>
+
+    <!-- Clear calling -->
+    <string name="clear_calling_footer">To protect your privacy, Clear Calling never sends audio or conversations to Google. Clear Calling is available depending on your Wi‑Fi and mobile network.</string>
+    <string name="clear_calling_footer_learn_more_link">https://support.google.com/pixelphone?p=clear_calling</string>
+    <string name="clear_calling_title">Clear Calling</string>
+    <string name="clear_calling_toggle">Use Clear Calling</string>
+    <string name="clear_calling_topintro">Reduces background noises during calls</string>
 </resources>
