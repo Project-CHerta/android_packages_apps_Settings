@@ -571,7 +571,7 @@
     <string name="config_rtt_setting_package_name" translatable="false"></string>
 
     <!-- Whether nfc detection point preview image is available or not. -->
-    <bool name="config_nfc_detection_point">false</bool>
+    <bool name="config_nfc_detection_point">true</bool>
 
     <!-- Whether to show Smooth Display feature in Settings Options -->
     <bool name="config_show_smooth_display">false</bool>
