@@ -189,4 +189,11 @@ Your phone’s battery will run out faster when using this feature. Battery Shar
     <string name="double_tap_screen_to_sleep_summary">Double tap an empty space on the lock screen to turn off the screen.</string>
     <string name="double_tap_screen_to_sleep_title">Double tap to turn off screen</string>
     <string name="keywords_double_tap_screen_to_sleep">double tap to sleep, lock screen</string>
+
+    <!-- Lab Settings -->
+    <string name="lab_settings_title">Component spoofing</string>
+
+    <!-- Play Integrity spoof -->
+    <string name="pi_spoof_title">Play Integrity spoofing</string>
+    <string name="pi_spoof_summary">Spoof your device as a different model to pass Play Integrity</string>
 </resources>
