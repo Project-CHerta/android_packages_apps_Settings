@@ -653,6 +653,8 @@ public class Settings extends SettingsActivity {
         }
     }
     public static class SafetyCenterActivity extends SettingsActivity { }
+    public static class BatteryShareSettingsActivity extends SettingsActivity {}
+
     // LiveDisplay
     public static class LiveDisplaySettingsActivity extends SettingsActivity { /* empty */ }
 }

@@ -186,4 +186,12 @@
     <!-- One shot automatic brightness -->
     <string name="auto_brightness_one_shot_title">One shot auto-brightness</string>
     <string name="auto_brightness_one_shot_summary">Brightness adjustment will only occur at the moment the screen is turned on</string>
+
+    <!-- Battery Share -->
+    <string name="keywords_battery_share">share, battery share</string>
+    <string name="battery_share_title">Battery Share</string>
+    <string name="battery_share_summary">Charge other devices by placing them on the back of your device</string>
+    <string name="battery_share_limit_title">Stop sharing battery when device reaches:</string>
+    <string name="battery_share_state_on">On</string>
+    <string name="battery_share_state_off">Off</string>
 </resources>
