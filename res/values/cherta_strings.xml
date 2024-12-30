@@ -147,4 +147,12 @@
     <string name="charging_control_target_time_summary">Battery will be fully charged by %s</string>
     <string name="charging_control_limit_title">Limit</string>
     <string name="reset">Reset</string>
+
+    <!-- Battery Share -->
+    <string name="keywords_battery_share">share, battery share</string>
+    <string name="battery_share_title">Battery Share</string>
+    <string name="battery_share_summary">Charge other devices by placing them on the back of your device</string>
+    <string name="battery_share_limit_title">Stop sharing battery when device reaches:</string>
+    <string name="battery_share_state_on">On</string>
+    <string name="battery_share_state_off">Off</string>
 </resources>
