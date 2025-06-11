@@ -76,3 +76,5 @@
 # Google
 -keep class com.google.android.settings.**
 
+# Lab
+-keep class com.android.settings.cherta.**
