@@ -196,4 +196,8 @@ Your phone’s battery will run out faster when using this feature. Battery Shar
     <!-- Play Integrity spoof -->
     <string name="pi_spoof_title">Play Integrity spoofing</string>
     <string name="pi_spoof_summary">Spoof your device as a different model to pass Play Integrity</string>
+
+    <!-- Keybox Data -->
+    <string name="keybox_data_title">Select keybox XML to spoof</string>
+    <string name="keybox_data_summary">Select a keybox XML for system-wide key attestation spoofing. Click the delete button to reset to default values</string>
 </resources>
