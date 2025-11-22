@@ -184,4 +184,9 @@ Your phone’s battery will run out faster when using this feature. Battery Shar
     <string name="language_picker_page">Language picker page</string>
     <string name="search_region">Search regions</string>
     <string name="search_region_page">Search region page</string>
+
+    <!-- Dt2Sleep -->
+    <string name="double_tap_screen_to_sleep_summary">Double tap an empty space on the lock screen to turn off the screen.</string>
+    <string name="double_tap_screen_to_sleep_title">Double tap to turn off screen</string>
+    <string name="keywords_double_tap_screen_to_sleep">double tap to sleep, lock screen</string>
 </resources>
