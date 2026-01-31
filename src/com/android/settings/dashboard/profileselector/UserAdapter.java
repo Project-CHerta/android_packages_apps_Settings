@@ -39,7 +39,6 @@ import android.widget.TextView;
 import com.android.internal.util.UserIcons;
 import com.android.internal.widget.RecyclerView;
 import com.android.settings.R;
-import com.android.settingslib.Utils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,13 +61,9 @@ public class UserAdapter extends BaseAdapter {
             mUserHandle = userHandle;
             mUserManager = um;
             UserInfo userInfo = um.getUserInfo(mUserHandle.getIdentifier());
-            int tintColor = Utils.getColorAttrDefaultColor(context,
-                    com.android.internal.R.attr.materialColorPrimary);
-            if (userInfo.isManagedProfile()
-                    || (android.os.Flags.allowPrivateProfile()
-                        && android.multiuser.Flags.enablePrivateSpaceFeatures()
-                        && android.multiuser.Flags.handleInterleavedSettingsForPrivateSpace()
-                        && userInfo.isPrivateProfile())) {
+            int tintColor = context.getColor(com.android.internal.R.color.materialColorPrimary);
+
+            if (userInfo.isManagedProfile() || userInfo.isPrivateProfile()) {
                 mIcon = context.getPackageManager().getUserBadgeForDensityNoBackground(
                         userHandle, /* density= */ 0);
                 if (mIcon != null) {
@@ -92,10 +87,7 @@ public class UserAdapter extends BaseAdapter {
             } else if (mUserManager.isManagedProfile(userId)) {
                 return resources.getString(WORK_CATEGORY_HEADER,
                         () -> context.getString(com.android.settingslib.R.string.category_work));
-            } else if (android.os.Flags.allowPrivateProfile()
-                    && android.multiuser.Flags.enablePrivateSpaceFeatures()
-                    && android.multiuser.Flags.handleInterleavedSettingsForPrivateSpace()
-                    && mUserManager.getUserInfo(userId).isPrivateProfile()) {
+            } else if (mUserManager.getUserInfo(userId).isPrivateProfile()) {
                 return resources.getString(PRIVATE_CATEGORY_HEADER,
                         () -> context.getString(com.android.settingslib.R.string.category_private));
             }

@@ -16,15 +16,21 @@
 
 package com.android.settings.gestures;
 
+import static com.android.settings.gestures.DoubleTapPowerSettingsUtils.DOUBLE_TAP_POWER_DISABLED_MODE;
+import static com.android.settings.gestures.DoubleTapPowerSettingsUtils.DOUBLE_TAP_POWER_MULTI_TARGET_MODE;
 import static com.android.settings.gestures.DoubleTapPowerSettingsUtils.OFF;
 import static com.android.settings.gestures.DoubleTapPowerSettingsUtils.ON;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.app.settings.SettingsEnums;
 import android.content.Context;
 import android.content.res.Resources;
 import android.provider.Settings;
@@ -33,6 +39,7 @@ import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.android.internal.R;
+import com.android.settings.testutils.FakeFeatureFactory;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -47,26 +54,33 @@ public class DoubleTapPowerSettingsUtilsTest {
     private Context mContext;
     private Resources mResources;
 
+    private FakeFeatureFactory mFeatureFactory;
+
     @Before
     public void setUp() {
         mContext = spy(ApplicationProvider.getApplicationContext());
         mResources = mock(Resources.class);
         when(mContext.getResources()).thenReturn(mResources);
+        mFeatureFactory = FakeFeatureFactory.setupForTest();
     }
 
     @Test
-    public void isDoubleTapPowerButtonGestureAvailable_setAvailable_returnsTrue() {
-        when(mResources.getBoolean(R.bool.config_doubleTapPowerGestureEnabled)).thenReturn(true);
+    public void isMultiTargetDoubleTapPowerButtonGestureAvailable_setAvailable_returnsTrue() {
+        when(mResources.getInteger(R.integer.config_doubleTapPowerGestureMode)).thenReturn(
+                DOUBLE_TAP_POWER_MULTI_TARGET_MODE);
 
-        assertThat(DoubleTapPowerSettingsUtils.isDoubleTapPowerButtonGestureAvailable(mContext))
+        assertThat(DoubleTapPowerSettingsUtils.isMultiTargetDoubleTapPowerButtonGestureAvailable(
+                mContext))
                 .isTrue();
     }
 
     @Test
-    public void isDoubleTapPowerButtonGestureAvailable_setUnavailable_returnsFalse() {
-        when(mResources.getBoolean(R.bool.config_doubleTapPowerGestureEnabled)).thenReturn(false);
+    public void isMultiTargetDoubleTapPowerButtonGestureAvailable_setUnavailable_returnsFalse() {
+        when(mResources.getInteger(R.integer.config_doubleTapPowerGestureMode)).thenReturn(
+                DOUBLE_TAP_POWER_DISABLED_MODE);
 
-        assertThat(DoubleTapPowerSettingsUtils.isDoubleTapPowerButtonGestureAvailable(mContext))
+        assertThat(DoubleTapPowerSettingsUtils.isMultiTargetDoubleTapPowerButtonGestureAvailable(
+                mContext))
                 .isFalse();
     }
 
@@ -103,11 +117,13 @@ public class DoubleTapPowerSettingsUtilsTest {
         DoubleTapPowerSettingsUtils.setDoubleTapPowerButtonGestureEnabled(mContext, true);
 
         assertThat(
-                        Settings.Secure.getInt(
-                                mContext.getContentResolver(),
-                                Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE_ENABLED,
-                                OFF))
+                Settings.Secure.getInt(
+                        mContext.getContentResolver(),
+                        Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE_ENABLED,
+                        OFF))
                 .isEqualTo(ON);
+        verify(mFeatureFactory.metricsFeatureProvider).action(any(),
+                eq(SettingsEnums.ACTION_DOUBLE_TAP_POWER_ENABLED), eq(true));
     }
 
     @Test
@@ -115,11 +131,13 @@ public class DoubleTapPowerSettingsUtilsTest {
         DoubleTapPowerSettingsUtils.setDoubleTapPowerButtonGestureEnabled(mContext, false);
 
         assertThat(
-                        Settings.Secure.getInt(
-                                mContext.getContentResolver(),
-                                Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE_ENABLED,
-                                ON))
+                Settings.Secure.getInt(
+                        mContext.getContentResolver(),
+                        Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE_ENABLED,
+                        ON))
                 .isEqualTo(OFF);
+        verify(mFeatureFactory.metricsFeatureProvider).action(any(),
+                eq(SettingsEnums.ACTION_DOUBLE_TAP_POWER_ENABLED), eq(false));
     }
 
     @Test
@@ -130,8 +148,8 @@ public class DoubleTapPowerSettingsUtilsTest {
                 DOUBLE_TAP_POWER_BUTTON_CAMERA_LAUNCH_VALUE);
 
         assertThat(
-                        DoubleTapPowerSettingsUtils
-                                .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
+                DoubleTapPowerSettingsUtils
+                        .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
                 .isTrue();
     }
 
@@ -144,32 +162,32 @@ public class DoubleTapPowerSettingsUtilsTest {
                 DOUBLE_TAP_POWER_BUTTON_WALLET_LAUNCH_VALUE);
 
         assertThat(
-                        DoubleTapPowerSettingsUtils
-                                .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
+                DoubleTapPowerSettingsUtils
+                        .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
                 .isFalse();
     }
 
     @Test
     public void
             isDoubleTapPowerButtonGestureForCameraLaunchEnabled_defaultSetToCamera_returnsTrue() {
-        when(mResources.getInteger(R.integer.config_defaultDoubleTapPowerGestureAction))
+        when(mResources.getInteger(R.integer.config_doubleTapPowerGestureMultiTargetDefaultAction))
                 .thenReturn(DOUBLE_TAP_POWER_BUTTON_CAMERA_LAUNCH_VALUE);
 
         assertThat(
-                        DoubleTapPowerSettingsUtils
-                                .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
+                DoubleTapPowerSettingsUtils
+                        .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
                 .isTrue();
     }
 
     @Test
     public void
             isDoubleTapPowerButtonGestureForCameraLaunchEnabled_defaultNotCamera_returnsFalse() {
-        when(mResources.getInteger(R.integer.config_defaultDoubleTapPowerGestureAction))
+        when(mResources.getInteger(R.integer.config_doubleTapPowerGestureMultiTargetDefaultAction))
                 .thenReturn(DOUBLE_TAP_POWER_BUTTON_WALLET_LAUNCH_VALUE);
 
         assertThat(
-                        DoubleTapPowerSettingsUtils
-                                .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
+                DoubleTapPowerSettingsUtils
+                        .isDoubleTapPowerButtonGestureForCameraLaunchEnabled(mContext))
                 .isFalse();
     }
 
@@ -180,11 +198,14 @@ public class DoubleTapPowerSettingsUtilsTest {
 
         assertThat(result).isTrue();
         assertThat(
-                        Settings.Secure.getInt(
-                                mContext.getContentResolver(),
-                                Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE,
-                                DOUBLE_TAP_POWER_BUTTON_WALLET_LAUNCH_VALUE))
+                Settings.Secure.getInt(
+                        mContext.getContentResolver(),
+                        Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE,
+                        DOUBLE_TAP_POWER_BUTTON_WALLET_LAUNCH_VALUE))
                 .isEqualTo(DOUBLE_TAP_POWER_BUTTON_CAMERA_LAUNCH_VALUE);
+        verify(mFeatureFactory.metricsFeatureProvider).action(any(),
+                eq(SettingsEnums.ACTION_DOUBLE_TAP_POWER_BUTTON_BEHAVIOR),
+                eq(DOUBLE_TAP_POWER_BUTTON_CAMERA_LAUNCH_VALUE));
     }
 
     @Test
@@ -194,10 +215,13 @@ public class DoubleTapPowerSettingsUtilsTest {
 
         assertThat(result).isTrue();
         assertThat(
-                        Settings.Secure.getInt(
-                                mContext.getContentResolver(),
-                                Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE,
-                                DOUBLE_TAP_POWER_BUTTON_CAMERA_LAUNCH_VALUE))
+                Settings.Secure.getInt(
+                        mContext.getContentResolver(),
+                        Settings.Secure.DOUBLE_TAP_POWER_BUTTON_GESTURE,
+                        DOUBLE_TAP_POWER_BUTTON_CAMERA_LAUNCH_VALUE))
                 .isEqualTo(DOUBLE_TAP_POWER_BUTTON_WALLET_LAUNCH_VALUE);
+        verify(mFeatureFactory.metricsFeatureProvider).action(any(),
+                eq(SettingsEnums.ACTION_DOUBLE_TAP_POWER_BUTTON_BEHAVIOR),
+                eq(DOUBLE_TAP_POWER_BUTTON_WALLET_LAUNCH_VALUE));
     }
 }

@@ -23,6 +23,8 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import android.app.admin.DevicePolicyManager;
+import android.app.admin.EnforcingAdmin;
+import android.app.supervision.SupervisionManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -30,6 +32,13 @@ import android.hardware.face.FaceManager;
 import android.hardware.fingerprint.FingerprintManager;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.platform.test.annotations.DisableFlags;
+import android.platform.test.annotations.EnableFlags;
+import android.platform.test.annotations.RequiresFlagsDisabled;
+import android.platform.test.annotations.RequiresFlagsEnabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
+import android.platform.test.flag.junit.DeviceFlagsValueProvider;
+import android.platform.test.flag.junit.SetFlagsRule;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -39,6 +48,7 @@ import com.android.settings.testutils.ResourcesUtils;
 import com.android.settingslib.RestrictedLockUtils;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -47,11 +57,16 @@ import org.mockito.MockitoAnnotations;
 @RunWith(AndroidJUnit4.class)
 public class FaceStatusUtilsTest {
 
+    @Rule
+    public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
+
+    @Rule
+    public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
+
     private static final ComponentName COMPONENT_NAME =
             new ComponentName("package", "class");
     private static final int USER_ID = UserHandle.myUserId();
     private static final UserHandle USER_HANDLE = new UserHandle(USER_ID);
-
 
     @Mock
     private PackageManager mPackageManager;
@@ -61,6 +76,8 @@ public class FaceStatusUtilsTest {
     private FingerprintManager mFingerprintManager;
     @Mock
     private FaceManager mFaceManager;
+    @Mock
+    private SupervisionManager mSupervisionManager;
 
     private Context mApplicationContext;
     private FaceStatusUtils mFaceStatusUtils;
@@ -72,13 +89,13 @@ public class FaceStatusUtilsTest {
         when(mApplicationContext.getPackageManager()).thenReturn(mPackageManager);
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)).thenReturn(true);
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE)).thenReturn(true);
-        when(mDevicePolicyManager.getProfileOwnerOrDeviceOwnerSupervisionComponent(USER_HANDLE))
-                .thenReturn(COMPONENT_NAME);
         when(mApplicationContext.getSystemService(Context.FINGERPRINT_SERVICE))
                 .thenReturn(mFingerprintManager);
         when(mApplicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE))
                 .thenReturn(mDevicePolicyManager);
         when(mApplicationContext.getSystemService(Context.FACE_SERVICE)).thenReturn(mFaceManager);
+        when(mApplicationContext.getSystemService(Context.SUPERVISION_SERVICE))
+                .thenReturn(mSupervisionManager);
         mFaceStatusUtils = new FaceStatusUtils(mApplicationContext, mFaceManager, USER_ID);
     }
 
@@ -129,7 +146,11 @@ public class FaceStatusUtilsTest {
     }
 
     @Test
+    @RequiresFlagsDisabled(android.app.supervision.flags.Flags.FLAG_DEPRECATE_DPM_SUPERVISION_APIS)
+    @DisableFlags({android.app.admin.flags.Flags.FLAG_POLICY_TRANSPARENCY_REFACTOR_ENABLED})
     public void getDisabledAdmin_whenFaceDisabled_returnsEnforcedAdmin() {
+        when(mDevicePolicyManager.getProfileOwnerOrDeviceOwnerSupervisionComponent(USER_HANDLE))
+                .thenReturn(COMPONENT_NAME);
         when(mDevicePolicyManager.getKeyguardDisabledFeatures(COMPONENT_NAME))
                 .thenReturn(DevicePolicyManager.KEYGUARD_DISABLE_FACE);
 
@@ -140,6 +161,22 @@ public class FaceStatusUtilsTest {
     }
 
     @Test
+    @EnableFlags(android.app.supervision.flags.Flags.FLAG_DEPRECATE_DPM_SUPERVISION_APIS)
+    @DisableFlags({android.app.admin.flags.Flags.FLAG_POLICY_TRANSPARENCY_REFACTOR_ENABLED})
+    public void getDisabledAdmin_whenFaceDisabled_returnsRestriction() {
+        when(mSupervisionManager.isSupervisionEnabledForUser(USER_ID)).thenReturn(true);
+        when(mSupervisionManager.getActiveSupervisionAppPackage()).thenReturn("supervision.pkg");
+        when(mDevicePolicyManager.getKeyguardDisabledFeatures(null))
+                .thenReturn(DevicePolicyManager.KEYGUARD_DISABLE_FACE);
+
+        final RestrictedLockUtils.EnforcedAdmin admin = mFaceStatusUtils.getDisablingAdmin();
+
+        assertThat(admin.enforcedRestriction).isEqualTo(UserManager.DISALLOW_BIOMETRIC);
+        assertThat(admin.user).isEqualTo(USER_HANDLE);
+    }
+
+    @Test
+    @DisableFlags({android.app.admin.flags.Flags.FLAG_POLICY_TRANSPARENCY_REFACTOR_ENABLED})
     public void getDisabledAdmin_withFaceEnabled_returnsNull() {
         when(mDevicePolicyManager.getKeyguardDisabledFeatures(COMPONENT_NAME)).thenReturn(0);
 
@@ -147,13 +184,66 @@ public class FaceStatusUtilsTest {
     }
 
     @Test
-    public void getSummary_whenNotEnrolled_returnsSummaryNone() {
+    @RequiresFlagsDisabled(android.app.supervision.flags.Flags.FLAG_DEPRECATE_DPM_SUPERVISION_APIS)
+    @EnableFlags({android.app.admin.flags.Flags.FLAG_POLICY_TRANSPARENCY_REFACTOR_ENABLED,
+            android.app.admin.flags.Flags.FLAG_SET_KEYGUARD_DISABLED_FEATURES_COEXISTENCE})
+    public void getEnforcingAdmin_whenFaceDisabled_returnsEnforcingAdmin() {
+        when(mDevicePolicyManager.getProfileOwnerOrDeviceOwnerSupervisionComponent(USER_HANDLE))
+                .thenReturn(COMPONENT_NAME);
+        when(mDevicePolicyManager.getKeyguardDisabledFeatures(COMPONENT_NAME))
+                .thenReturn(DevicePolicyManager.KEYGUARD_DISABLE_FACE);
+
+        final EnforcingAdmin admin = mFaceStatusUtils.getEnforcingAdmin();
+
+        assertThat(admin).isNotNull();
+        assertThat(admin.getComponentName()).isEqualTo(COMPONENT_NAME);
+    }
+
+    @Test
+    @EnableFlags({android.app.admin.flags.Flags.FLAG_POLICY_TRANSPARENCY_REFACTOR_ENABLED,
+            android.app.admin.flags.Flags.FLAG_SET_KEYGUARD_DISABLED_FEATURES_COEXISTENCE,
+            android.app.supervision.flags.Flags.FLAG_DEPRECATE_DPM_SUPERVISION_APIS})
+    public void getEnforcingAdmin_whenFaceDisabled_returnsAdmin() {
+        final String supervisionPkg = "supervision.pkg";
+        when(mSupervisionManager.isSupervisionEnabledForUser(USER_ID)).thenReturn(true);
+        when(mSupervisionManager.getActiveSupervisionAppPackage()).thenReturn(supervisionPkg);
+        when(mDevicePolicyManager.getKeyguardDisabledFeatures(null)).thenReturn(
+                DevicePolicyManager.KEYGUARD_DISABLE_FACE);
+
+        final EnforcingAdmin admin = mFaceStatusUtils.getEnforcingAdmin();
+
+        assertThat(admin).isNotNull();
+    }
+
+    @Test
+    @EnableFlags({android.app.admin.flags.Flags.FLAG_POLICY_TRANSPARENCY_REFACTOR_ENABLED,
+            android.app.admin.flags.Flags.FLAG_SET_KEYGUARD_DISABLED_FEATURES_COEXISTENCE})
+    public void getEnforcingAdmin_withFaceEnabled_returnsNull() {
+        when(mDevicePolicyManager.getKeyguardDisabledFeatures(COMPONENT_NAME)).thenReturn(0);
+
+        assertThat(mFaceStatusUtils.getEnforcingAdmin()).isNull();
+    }
+
+    @Test
+    @RequiresFlagsDisabled(com.android.settings.flags.Flags.FLAG_BIOMETRICS_ONBOARDING_EDUCATION)
+    public void getSummary_whenNotEnrolled_flagOff_returnsSummaryNone() {
         when(mFaceManager.hasEnrolledTemplates(anyInt())).thenReturn(false);
 
         assertThat(mFaceStatusUtils.getSummary())
                 .isEqualTo(ResourcesUtils.getResourcesString(
                         mApplicationContext,
                         "security_settings_face_preference_summary_none"));
+    }
+
+    @Test
+    @RequiresFlagsEnabled(com.android.settings.flags.Flags.FLAG_BIOMETRICS_ONBOARDING_EDUCATION)
+    public void getSummary_whenNotEnrolled_flagOn_returnsSummaryNone() {
+        when(mFaceManager.hasEnrolledTemplates(anyInt())).thenReturn(false);
+
+        assertThat(mFaceStatusUtils.getSummary())
+                .isEqualTo(ResourcesUtils.getResourcesString(
+                        mApplicationContext,
+                        "security_settings_face_preference_summary_none_new"));
     }
 
     @Test
@@ -166,16 +256,9 @@ public class FaceStatusUtilsTest {
                         "security_settings_face_preference_summary"));
     }
 
-    @Test
-    public void getSettingsClassName_whenNotEnrolled_returnsFaceEnrollInduction() {
-        when(mFaceManager.hasEnrolledTemplates(anyInt())).thenReturn(false);
-
-        assertThat(mFaceStatusUtils.getSettingsClassName())
-                .isEqualTo(FaceEnrollIntroductionInternal.class.getName());
-    }
 
     @Test
-    public void getSettingsClassName_whenEnrolled_returnsFaceSettings() {
+    public void getSettingsClassName_returnsFaceSettings() {
         when(mFaceManager.hasEnrolledTemplates(anyInt())).thenReturn(true);
 
         assertThat(mFaceStatusUtils.getSettingsClassName())

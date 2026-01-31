@@ -16,21 +16,26 @@
 
 package com.android.settings.notification.history;
 
+import static android.provider.Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS;
 import static android.provider.Settings.Secure.NOTIFICATION_HISTORY_ENABLED;
+import static android.view.View.GONE;
+import static android.view.View.VISIBLE;
 
 import static androidx.core.view.accessibility.AccessibilityEventCompat.TYPE_VIEW_ACCESSIBILITY_FOCUSED;
 
 import android.annotation.AttrRes;
 import android.annotation.ColorInt;
+import android.annotation.DrawableRes;
 import android.app.ActionBar;
 import android.app.ActivityManager;
 import android.app.INotificationManager;
+import android.app.KeyguardManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
-import android.graphics.Outline;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -41,14 +46,14 @@ import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
 import android.util.Slog;
-import android.util.TypedValue;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewOutlineProvider;
 import android.widget.CompoundButton.OnCheckedChangeListener;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.Space;
 import android.widget.TextView;
 
 import androidx.core.graphics.ColorUtils;
@@ -58,6 +63,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.UiEventLoggerImpl;
+import com.android.internal.widget.LockPatternUtils;
 import com.android.internal.widget.NotificationExpandButton;
 import com.android.settings.R;
 import com.android.settings.notification.NotificationBackend;
@@ -68,6 +74,7 @@ import com.android.settingslib.widget.MainSwitchBar;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -95,23 +102,10 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
     private PackageManager mPm;
     private CountDownLatch mCountdownLatch;
     private Future mCountdownFuture;
-    private final ViewOutlineProvider mOutlineProvider = new ViewOutlineProvider() {
-        @Override
-        public void getOutline(View view, Outline outline) {
-            final TypedArray ta = NotificationHistoryActivity.this.obtainStyledAttributes(
-                    new int[]{android.R.attr.dialogCornerRadius});
-            final float dialogCornerRadius = ta.getDimension(0, 0);
-            ta.recycle();
-            TypedValue v = new TypedValue();
-            NotificationHistoryActivity.this.getTheme().resolveAttribute(
-                    com.android.internal.R.attr.listDivider, v, true);
-            int bottomPadding = NotificationHistoryActivity.this.getDrawable(v.resourceId)
-                    .getIntrinsicHeight();
-            outline.setRoundRect(0, 0, view.getWidth(), (view.getHeight() - bottomPadding),
-                    dialogCornerRadius);
-        }
-    };
+
     private UiEventLogger mUiEventLogger = new UiEventLoggerImpl();
+
+    private ArrayList<Integer> mContentRestrictedUsers = new ArrayList<>();
 
     enum NotificationHistoryEvent implements UiEventLogger.UiEventEnum {
         @UiEvent(doc = "User turned on notification history")
@@ -158,12 +152,10 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
 
     private HistoryLoader.OnHistoryLoaderListener mOnHistoryLoaderListener = notifications -> {
         findViewById(R.id.today_list).setVisibility(
-                notifications.isEmpty() ? View.GONE : View.VISIBLE);
+                notifications.isEmpty() ? GONE : VISIBLE);
         mCountdownLatch.countDown();
         View recyclerView = mTodayView.findViewById(R.id.apps);
         recyclerView.setClipToOutline(true);
-        mTodayView.setOutlineProvider(mOutlineProvider);
-        mSnoozeView.setOutlineProvider(mOutlineProvider);
         // for each package, new header and recycler view
         for (int i = 0, notificationsSize = notifications.size(); i < notificationsSize; i++) {
             NotificationHistoryPackage nhp = notifications.get(i);
@@ -171,29 +163,30 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
                     .inflate(R.layout.notification_history_app_layout, null);
 
             final View container = viewForPackage.findViewById(R.id.notification_list_wrapper);
-            container.setVisibility(View.GONE);
+            container.setVisibility(GONE);
             View header = viewForPackage.findViewById(R.id.app_header);
             NotificationExpandButton expand = viewForPackage.findViewById(
                     com.android.internal.R.id.expand_button);
-            int textColor = obtainThemeColor(android.R.attr.textColorPrimary);
-            int backgroundColor = obtainThemeColor(android.R.attr.colorBackgroundFloating);
-            int pillColor = ColorUtils.blendARGB(textColor, backgroundColor, 0.9f);
+            int textColor = getResources().getColor(
+                    com.android.internal.R.color.materialColorOnSurface, getTheme());
+            int pillColor = getResources().getColor(
+                    com.android.internal.R.color.surface_effect_3, getTheme());
             expand.setDefaultPillColor(pillColor);
             expand.setDefaultTextColor(textColor);
             expand.setExpanded(false);
-            header.setStateDescription(container.getVisibility() == View.VISIBLE
+            header.setStateDescription(container.getVisibility() == VISIBLE
                     ? getString(R.string.condition_expand_hide)
                     : getString(R.string.condition_expand_show));
             int finalI = i;
             header.setOnClickListener(v -> {
-                container.setVisibility(container.getVisibility() == View.VISIBLE
-                        ? View.GONE : View.VISIBLE);
-                expand.setExpanded(container.getVisibility() == View.VISIBLE);
-                header.setStateDescription(container.getVisibility() == View.VISIBLE
+                container.setVisibility(container.getVisibility() == VISIBLE
+                        ? GONE : VISIBLE);
+                expand.setExpanded(container.getVisibility() == VISIBLE);
+                header.setStateDescription(container.getVisibility() == VISIBLE
                         ? getString(R.string.condition_expand_hide)
                         : getString(R.string.condition_expand_show));
                 header.sendAccessibilityEvent(TYPE_VIEW_ACCESSIBILITY_FOCUSED);
-                mUiEventLogger.logWithPosition((container.getVisibility() == View.VISIBLE)
+                mUiEventLogger.logWithPosition((container.getVisibility() == VISIBLE)
                                 ? NotificationHistoryEvent.NOTIFICATION_HISTORY_PACKAGE_HISTORY_OPEN
                               : NotificationHistoryEvent.NOTIFICATION_HISTORY_PACKAGE_HISTORY_CLOSE,
                         nhp.uid, nhp.pkgName, finalI);
@@ -206,31 +199,32 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
             ImageView icon = viewForPackage.findViewById(R.id.icon);
             icon.setImageDrawable(nhp.icon);
 
-            TextView count = viewForPackage.findViewById(R.id.count);
-            count.setText(StringUtil.getIcuPluralsString(this, nhp.notifications.size(),
-                    R.string.notification_history_count));
+            TextView count = viewForPackage.findViewById(
+                    com.android.internal.R.id.expand_button_number);
+            count.setText(String.valueOf(nhp.notifications.size()));
+            count.setVisibility(VISIBLE);
 
             final NotificationHistoryRecyclerView rv =
                     viewForPackage.findViewById(R.id.notification_list);
-            rv.setAdapter(new NotificationHistoryAdapter(mNm, rv,
+            rv.setAdapter(new NotificationHistoryAdapter(NotificationHistoryActivity.this, mNm, rv,
                     newCount -> {
-                        count.setText(StringUtil.getIcuPluralsString(this, newCount,
-                                R.string.notification_history_count));
+                        count.setText(String.valueOf(newCount));
                         if (newCount == 0) {
-                            viewForPackage.setVisibility(View.GONE);
+                            viewForPackage.setVisibility(GONE);
                         }
-                    }, mUiEventLogger));
+                    }, mUiEventLogger, mContentRestrictedUsers));
             ((NotificationHistoryAdapter) rv.getAdapter()).onRebuildComplete(
                     new ArrayList<>(nhp.notifications));
 
             mTodayView.addView(viewForPackage);
+            Space space = new Space(NotificationHistoryActivity.this);
+
+            // Equally distribute width among all grid items.
+            space.setLayoutParams(
+                    new LinearLayout.LayoutParams(/* width= */ 0, 1, 1));
+            mTodayView.addView(space);
         }
     };
-
-    private void configureNotificationList(View recyclerView) {
-        recyclerView.setClipToOutline(true);
-        recyclerView.setOutlineProvider(mOutlineProvider);
-    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -240,8 +234,6 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
         mTodayView = findViewById(R.id.apps);
         mSnoozeView = findViewById(R.id.snoozed_list);
         mDismissView = findViewById(R.id.recently_dismissed_list);
-        configureNotificationList(mDismissView.findViewById(R.id.notification_list));
-        configureNotificationList(mSnoozeView.findViewById(R.id.notification_list));
         mHistoryOff = findViewById(R.id.history_off);
         mHistoryOn = findViewById(R.id.history_on);
         mHistoryEmpty = findViewById(R.id.history_on_empty);
@@ -263,6 +255,19 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
 
         mPm = getPackageManager();
         mUm = getSystemService(UserManager.class);
+
+        List<UserInfo> users = mUm.getProfiles(getUserId());
+        for (UserInfo user : users) {
+            if (Settings.Secure.getIntForUser(getContentResolver(),
+                    LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS, 0, user.id) == 0) {
+                LockPatternUtils lpu = new LockPatternUtils(this);
+                KeyguardManager km = getSystemService(KeyguardManager.class);
+                if (lpu.isSecure(user.id) && km.isDeviceLocked(user.id)) {
+                    mContentRestrictedUsers.add(user.id);
+                }
+            }
+        }
+
         // wait for history loading and recent/snooze loading
         mCountdownLatch = new CountDownLatch(2);
 
@@ -289,11 +294,11 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
             }
             ThreadUtils.postOnMainThread(() -> {
                 if (mSwitchBar.isChecked()
-                        && findViewById(R.id.today_list).getVisibility() == View.GONE
-                        && mSnoozeView.getVisibility() == View.GONE
-                        && mDismissView.getVisibility() == View.GONE) {
-                    mHistoryOn.setVisibility(View.GONE);
-                    mHistoryEmpty.setVisibility(View.VISIBLE);
+                        && findViewById(R.id.today_list).getVisibility() == GONE
+                        && mSnoozeView.getVisibility() == GONE
+                        && mDismissView.getVisibility() == GONE) {
+                    mHistoryOn.setVisibility(GONE);
+                    mHistoryEmpty.setVisibility(VISIBLE);
                 }
             });
         });
@@ -320,14 +325,6 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
         super.onDestroy();
     }
 
-    private @ColorInt int obtainThemeColor(@AttrRes int attrRes) {
-        Resources.Theme theme = new ContextThemeWrapper(this,
-                android.R.style.Theme_DeviceDefault_DayNight).getTheme();
-        try (TypedArray ta = theme.obtainStyledAttributes(new int[]{attrRes})) {
-            return ta == null ? 0 : ta.getColor(0, 0);
-        }
-    }
-
     private void bindSwitch() {
         if (mSwitchBar != null) {
             mSwitchBar.show();
@@ -345,14 +342,14 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
 
     private void toggleViews(boolean isChecked) {
         if (isChecked) {
-            mHistoryOff.setVisibility(View.GONE);
-            mHistoryOn.setVisibility(View.VISIBLE);
+            mHistoryOff.setVisibility(GONE);
+            mHistoryOn.setVisibility(VISIBLE);
         } else {
-            mHistoryOn.setVisibility(View.GONE);
-            mHistoryOff.setVisibility(View.VISIBLE);
+            mHistoryOn.setVisibility(GONE);
+            mHistoryOff.setVisibility(VISIBLE);
             mTodayView.removeAllViews();
         }
-        mHistoryEmpty.setVisibility(View.GONE);
+        mHistoryEmpty.setVisibility(GONE);
     }
 
     private final OnCheckedChangeListener mOnSwitchClickListener =
@@ -372,13 +369,13 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
                     Log.d(TAG, "onSwitchChange history to " + isChecked);
                 }
                 // Reset UI visibility to ensure it matches real state.
-                mHistoryOn.setVisibility(View.GONE);
+                mHistoryOn.setVisibility(GONE);
                 if (isChecked) {
-                    mHistoryEmpty.setVisibility(View.VISIBLE);
-                    mHistoryOff.setVisibility(View.GONE);
+                    mHistoryEmpty.setVisibility(VISIBLE);
+                    mHistoryOff.setVisibility(GONE);
                 } else {
-                    mHistoryOff.setVisibility(View.VISIBLE);
-                    mHistoryEmpty.setVisibility(View.GONE);
+                    mHistoryOff.setVisibility(VISIBLE);
+                    mHistoryEmpty.setVisibility(GONE);
                 }
                 mTodayView.removeAllViews();
             };
@@ -406,11 +403,14 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
             mSnoozedRv.setLayoutManager(lm);
             mSnoozedRv.setAdapter(
                     new NotificationSbnAdapter(NotificationHistoryActivity.this, mPm, mUm,
-                            true, mUiEventLogger));
+                            true, mUiEventLogger, mContentRestrictedUsers));
             mSnoozedRv.setNestedScrollingEnabled(false);
+            mSnoozedRv.addItemDecoration(new ItemSpacingDecoration(
+                    NotificationHistoryActivity.this.getResources().getDimensionPixelSize(
+                            R.dimen.chartview_divider_width)));
 
             if (snoozed == null || snoozed.length == 0) {
-                mSnoozeView.setVisibility(View.GONE);
+                mSnoozeView.setVisibility(GONE);
             } else {
                 ((NotificationSbnAdapter) mSnoozedRv.getAdapter()).onRebuildComplete(
                         new ArrayList<>(Arrays.asList(snoozed)));
@@ -422,13 +422,16 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
             mDismissedRv.setLayoutManager(dismissLm);
             mDismissedRv.setAdapter(
                     new NotificationSbnAdapter(NotificationHistoryActivity.this, mPm, mUm,
-                            false, mUiEventLogger));
+                            false, mUiEventLogger, mContentRestrictedUsers));
             mDismissedRv.setNestedScrollingEnabled(false);
+            mDismissedRv.addItemDecoration(new ItemSpacingDecoration(
+                    NotificationHistoryActivity.this.getResources().getDimensionPixelSize(
+                            R.dimen.chartview_divider_width)));
 
             if (dismissed == null || dismissed.length == 0) {
-                mDismissView.setVisibility(View.GONE);
+                mDismissView.setVisibility(GONE);
             } else {
-                mDismissView.setVisibility(View.VISIBLE);
+                mDismissView.setVisibility(VISIBLE);
                 ((NotificationSbnAdapter) mDismissedRv.getAdapter()).onRebuildComplete(
                         new ArrayList<>(Arrays.asList(dismissed)));
             }
@@ -446,10 +449,10 @@ public class NotificationHistoryActivity extends CollapsingToolbarBaseActivity {
                 int reason) {
             if (reason == REASON_SNOOZED) {
                 ((NotificationSbnAdapter) mSnoozedRv.getAdapter()).addSbn(sbn);
-                mSnoozeView.setVisibility(View.VISIBLE);
+                mSnoozeView.setVisibility(VISIBLE);
             } else {
                 ((NotificationSbnAdapter) mDismissedRv.getAdapter()).addSbn(sbn);
-                mDismissView.setVisibility(View.VISIBLE);
+                mDismissView.setVisibility(VISIBLE);
             }
         }
     };

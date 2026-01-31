@@ -41,6 +41,7 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
+import android.util.IconDrawableFactory;
 import android.util.Log;
 import android.util.Slog;
 import android.view.LayoutInflater;
@@ -68,24 +69,19 @@ public class NotificationSbnAdapter extends
     private Map<Integer, Drawable> mUserBadgeCache;
     private final Context mContext;
     private PackageManager mPm;
-    private @ColorInt int mBackgroundColor;
-    private boolean mInNightMode;
     private @UserIdInt int mCurrentUser;
     private List<Integer> mEnabledProfiles = new ArrayList<>();
     private boolean mIsSnoozed;
     private UiEventLogger mUiEventLogger;
+    private ArrayList<Integer> mContentRestrictedUsers = new ArrayList<>();
 
     public NotificationSbnAdapter(Context context, PackageManager pm, UserManager um,
-            boolean isSnoozed, UiEventLogger uiEventLogger) {
+            boolean isSnoozed, UiEventLogger uiEventLogger,
+            ArrayList<Integer> contentRestrictedUsers) {
         mContext = context;
         mPm = pm;
         mUserBadgeCache = new HashMap<>();
         mValues = new ArrayList<>();
-        mBackgroundColor = Utils.getColorAttrDefaultColor(context,
-                android.R.attr.colorBackground);
-        Configuration currentConfig = mContext.getResources().getConfiguration();
-        mInNightMode = (currentConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                == Configuration.UI_MODE_NIGHT_YES;
         mCurrentUser = ActivityManager.getCurrentUser();
         int[] enabledUsers = um.getEnabledProfileIds(mCurrentUser);
         for (int id : enabledUsers) {
@@ -97,6 +93,7 @@ public class NotificationSbnAdapter extends
         // If true, this is the panel for snoozed notifs, otherwise the one for dismissed notifs.
         mIsSnoozed = isSnoozed;
         mUiEventLogger = uiEventLogger;
+        mContentRestrictedUsers = contentRestrictedUsers;
     }
 
     @Override
@@ -111,13 +108,15 @@ public class NotificationSbnAdapter extends
             int position) {
         final StatusBarNotification sbn = mValues.get(position);
         if (sbn != null) {
-            holder.setIconBackground(loadBackground(sbn));
-            holder.setIcon(loadIcon(sbn));
-            holder.setPackageLabel(loadPackageLabel(sbn.getPackageName()).toString());
-            holder.setTitle(getTitleString(sbn.getNotification()));
-            holder.setSummary(getTextString(mContext, sbn.getNotification()));
+            setLabelAndIcon(holder, sbn);
+            if (mContentRestrictedUsers.contains(sbn.getNormalizedUserId())) {
+                holder.setSummary(mContext.getString(
+                        com.android.internal.R.string.notification_hidden_text));
+            } else {
+                holder.setTitle(getTitleString(sbn.getNotification()));
+                holder.setSummary(getTextString(mContext, sbn.getNotification()));
+            }
             holder.setPostedTime(sbn.getPostTime());
-            holder.setDividerVisible(position < (mValues.size() -1));
             int userId = normalizeUserId(sbn);
             if (!mUserBadgeCache.containsKey(userId)) {
                 Drawable profile = mContext.getPackageManager().getUserBadgeForDensityNoBackground(
@@ -140,19 +139,6 @@ public class NotificationSbnAdapter extends
         } else {
             Slog.w(TAG, "null entry in list at position " + position);
         }
-    }
-
-    private Drawable loadBackground(StatusBarNotification sbn) {
-        Drawable bg = mContext.getDrawable(R.drawable.circle);
-        int color = sbn.getNotification().color;
-        if (color == COLOR_DEFAULT) {
-            color = Utils.getColorAttrDefaultColor(
-                    mContext, com.android.internal.R.attr.colorAccent);
-        }
-        color = ContrastColorUtil.resolveContrastColor(
-                mContext, color, mBackgroundColor, mInNightMode);
-        bg.setColorFilter(new PorterDuffColorFilter(color, PorterDuff.Mode.SRC_ATOP));
-        return bg;
     }
 
     @Override
@@ -191,15 +177,16 @@ public class NotificationSbnAdapter extends
         return true;
     }
 
-    private @NonNull CharSequence loadPackageLabel(String pkg) {
+    private void setLabelAndIcon(NotificationSbnViewHolder holder, StatusBarNotification sbn) {
         try {
-            ApplicationInfo info = mPm.getApplicationInfo(pkg,
-                    MATCH_ANY_USER);
-            if (info != null) return mPm.getApplicationLabel(info);
+            ApplicationInfo info = mPm.getApplicationInfo(sbn.getPackageName(), MATCH_ANY_USER);
+            if (info != null){
+                holder.setPackageLabel(mPm.getApplicationLabel(info).toString());
+                holder.setIcon(Utils.getBadgedIcon(mContext, info));
+            }
         } catch (NameNotFoundException e) {
-            Log.e(TAG, "Cannot load package name", e);
+            Log.e(TAG, "Cannot load app info", e);
         }
-        return pkg;
     }
 
     private static String getTitleString(Notification n) {
@@ -235,17 +222,6 @@ public class NotificationSbnAdapter extends
             }
         }
         return text == null ? null : String.valueOf(text);
-    }
-
-    private Drawable loadIcon(StatusBarNotification sbn) {
-        Drawable draw = sbn.getNotification().getSmallIcon().loadDrawableAsUser(
-                sbn.getPackageContext(mContext), normalizeUserId(sbn));
-        if (draw == null) {
-            return null;
-        }
-        draw.mutate();
-        draw.setColorFilter(mBackgroundColor, PorterDuff.Mode.SRC_ATOP);
-        return draw;
     }
 
     private int normalizeUserId(StatusBarNotification sbn) {

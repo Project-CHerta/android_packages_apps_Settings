@@ -58,6 +58,7 @@ import com.android.settings.R;
 import com.android.settings.Utils;
 import com.android.settings.dashboard.RestrictedDashboardFragment;
 import com.android.settings.datausage.DataSaverBackend;
+import com.android.settings.flags.Flags;
 import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settings.wifi.tether.WifiTetherPreferenceController;
 import com.android.settingslib.RestrictedLockUtils;
@@ -72,7 +73,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-// LINT.IfChange
 /**
  * Displays preferences for Tethering.
  */
@@ -104,7 +104,7 @@ public class TetherSettings extends RestrictedDashboardFragment
     TwoStatePreference mEthernetTether;
 
     private BroadcastReceiver mTetherChangeReceiver;
-    private BroadcastReceiver mBluetoothStateReceiver;
+    @Nullable private BroadcastReceiver mBluetoothStateReceiver;
 
     private String[] mBluetoothRegexs;
     private AtomicReference<BluetoothPan> mBluetoothPan = new AtomicReference<>();
@@ -174,15 +174,17 @@ public class TetherSettings extends RestrictedDashboardFragment
 
         final Activity activity = getActivity();
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter != null) {
-            adapter.getProfileProxy(activity.getApplicationContext(), mProfileServiceListener,
-                    BluetoothProfile.PAN);
-        }
-        if (mBluetoothStateReceiver == null) {
-            mBluetoothStateReceiver = new BluetoothStateReceiver();
-            mContext.registerReceiver(
-                    mBluetoothStateReceiver,
-                    new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));
+        if (!isBluetoothTetherSwitchMigrated()) {
+            if (adapter != null) {
+                adapter.getProfileProxy(activity.getApplicationContext(), mProfileServiceListener,
+                        BluetoothProfile.PAN);
+            }
+            if (mBluetoothStateReceiver == null) {
+                mBluetoothStateReceiver = new BluetoothStateReceiver();
+                mContext.registerReceiver(
+                        mBluetoothStateReceiver,
+                        new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));
+            }
         }
 
         setTopIntroPreferenceTitle();
@@ -209,9 +211,9 @@ public class TetherSettings extends RestrictedDashboardFragment
             mWifiTetherPreferenceController.displayPreference(getPreferenceScreen());
         }
 
-        if (!isCatalystEnabled()) {
+        if (!isBluetoothTetherSwitchMigrated()) {
             if (!bluetoothAvailable) {
-                mBluetoothTether.setVisible(false);
+                getPreferenceScreen().removePreference(mBluetoothTether);
             } else {
                 BluetoothPan pan = mBluetoothPan.get();
                 if (pan != null && pan.isTetheringOn()) {
@@ -221,7 +223,6 @@ public class TetherSettings extends RestrictedDashboardFragment
                 }
             }
         }
-
         if (!ethernetAvailable) getPreferenceScreen().removePreference(mEthernetTether);
         // Set initial state based on Data Saver mode.
         onDataSaverChanged(mDataSaverBackend.isDataSaverEnabled());
@@ -247,14 +248,16 @@ public class TetherSettings extends RestrictedDashboardFragment
 
         mDataSaverBackend.remListener(this);
 
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        BluetoothProfile profile = mBluetoothPan.getAndSet(null);
-        if (profile != null && adapter != null) {
-            adapter.closeProfileProxy(BluetoothProfile.PAN, profile);
-        }
-        if (mBluetoothStateReceiver != null) {
-            mContext.unregisterReceiver(mBluetoothStateReceiver);
-            mBluetoothStateReceiver = null;
+        if (!isBluetoothTetherSwitchMigrated()) {
+            BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            BluetoothProfile profile = mBluetoothPan.getAndSet(null);
+            if (profile != null && adapter != null) {
+                adapter.closeProfileProxy(BluetoothProfile.PAN, profile);
+            }
+            if (mBluetoothStateReceiver != null) {
+                mContext.unregisterReceiver(mBluetoothStateReceiver);
+                mBluetoothStateReceiver = null;
+            }
         }
 
         super.onDestroy();
@@ -274,7 +277,7 @@ public class TetherSettings extends RestrictedDashboardFragment
             mWifiTetherPreferenceController.setDataSaverEnabled(mDataSaverEnabled);
         }
         mUsbTether.setEnabled(!mDataSaverEnabled);
-        if (!isCatalystEnabled()) {
+        if (!isBluetoothTetherSwitchMigrated()) {
             mBluetoothTether.setEnabled(!mDataSaverEnabled);
         }
         mEthernetTether.setEnabled(!mDataSaverEnabled);
@@ -441,10 +444,12 @@ public class TetherSettings extends RestrictedDashboardFragment
         filter.addDataScheme("file");
         activity.registerReceiver(mTetherChangeReceiver, filter);
 
-        filter = new IntentFilter();
-        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
-        filter.addAction(BluetoothPan.ACTION_TETHERING_STATE_CHANGED);
-        activity.registerReceiver(mTetherChangeReceiver, filter);
+        if (!isBluetoothTetherSwitchMigrated()) {
+            filter = new IntentFilter();
+            filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+            filter.addAction(BluetoothPan.ACTION_TETHERING_STATE_CHANGED);
+            activity.registerReceiver(mTetherChangeReceiver, filter);
+        }
 
         if (intent != null) mTetherChangeReceiver.onReceive(activity, intent);
     }
@@ -526,8 +531,9 @@ public class TetherSettings extends RestrictedDashboardFragment
     }
 
     private void updateBluetoothState() {
-        if (isCatalystEnabled()) return;
-
+        if (isBluetoothTetherSwitchMigrated()) {
+            return;
+        }
         final int btState = getBluetoothState();
         if (DEBUG) {
             Log.d(TAG, "updateBluetoothState() btState : " + btState);
@@ -583,7 +589,7 @@ public class TetherSettings extends RestrictedDashboardFragment
     }
 
     private void startTethering(int choice) {
-        if (choice == TETHERING_BLUETOOTH && !isCatalystEnabled()) {
+        if (choice == TETHERING_BLUETOOTH) {
             // Turn on Bluetooth first.
             BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
             if (adapter.getState() == BluetoothAdapter.STATE_OFF) {
@@ -605,11 +611,13 @@ public class TetherSettings extends RestrictedDashboardFragment
             } else {
                 mCm.stopTethering(TETHERING_USB);
             }
-        } else if (preference == mBluetoothTether && !isCatalystEnabled()) {
-            if (mBluetoothTether.isChecked()) {
-                startTethering(TETHERING_BLUETOOTH);
-            } else {
-                mCm.stopTethering(TETHERING_BLUETOOTH);
+        } else if (preference == mBluetoothTether) {
+            if (!isBluetoothTetherSwitchMigrated()) {
+                if (mBluetoothTether.isChecked()) {
+                    startTethering(TETHERING_BLUETOOTH);
+                } else {
+                    mCm.stopTethering(TETHERING_BLUETOOTH);
+                }
             }
         } else if (preference == mEthernetTether) {
             if (mEthernetTether.isChecked()) {
@@ -752,5 +760,8 @@ public class TetherSettings extends RestrictedDashboardFragment
     public @Nullable String getPreferenceScreenBindingKey(@NonNull Context context) {
         return TetherScreen.KEY;
     }
+
+    private boolean isBluetoothTetherSwitchMigrated() {
+        return isCatalystEnabled() && Flags.catalystTetherSettings26q1();
+    }
 }
-// LINT.ThenChange(BluetoothTetherSwitchPreference.kt)

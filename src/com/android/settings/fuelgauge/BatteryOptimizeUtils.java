@@ -152,13 +152,18 @@ public class BatteryOptimizeUtils {
     }
 
     /** Sets the {@link OptimizationMode} for associated app. */
-    public void setAppUsageState(@OptimizationMode int mode, Action action) {
-        if (getAppOptimizationMode() == mode) {
+    public void setAppUsageState(@OptimizationMode int mode, Action action, boolean forceMode) {
+        if (!forceMode && getAppOptimizationMode() == mode) {
             Log.w(TAG, "set the same optimization mode for: " + mPackageName);
             return;
         }
         setAppUsageStateInternal(
                 mContext, mode, mUid, mPackageName, mBatteryUtils, mPowerAllowListBackend, action);
+    }
+
+    /** Sets the {@link OptimizationMode} for associated app. */
+    public void setAppUsageState(@OptimizationMode int mode, Action action) {
+        setAppUsageState(mode, action, /* forceMode= */ false);
     }
 
     /** Return {@code true} if it is disabled for default optimized mode only. */
@@ -368,6 +373,9 @@ public class BatteryOptimizeUtils {
                 context, action, packageNameKey, createLogEvent(appStandbyMode, allowListed));
         if (action != Action.RESET) { // reset has been notified in resetAppOptimizationMode
             BatterySettingsStorage.get(context).notifyChange(toChangeReason(action));
+        }
+        if (action == Action.BATTERY_TIP_APPLY || action == Action.BATTERY_TIP_ACCEPT) {
+            BatteryOptimizationActionLogUtils.writeLog(context, packageNameKey, action);
         }
     }
 

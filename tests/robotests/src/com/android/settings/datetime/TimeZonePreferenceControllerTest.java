@@ -16,6 +16,7 @@
 
 package com.android.settings.datetime;
 
+import static android.app.time.Capabilities.CAPABILITY_POSSESSED;
 import static android.app.time.DetectorStatusTypes.DETECTION_ALGORITHM_STATUS_RUNNING;
 import static android.app.time.DetectorStatusTypes.DETECTOR_STATUS_RUNNING;
 import static android.app.time.LocationTimeZoneAlgorithmStatus.PROVIDER_STATUS_NOT_PRESENT;
@@ -38,6 +39,7 @@ import android.app.time.TimeZoneDetectorStatus;
 import android.content.Context;
 import android.os.UserHandle;
 
+import com.android.settingslib.RestrictedLockUtils;
 import com.android.settingslib.RestrictedPreference;
 
 import org.junit.Before;
@@ -73,7 +75,7 @@ public class TimeZonePreferenceControllerTest {
     @Test
     public void updateState_suggestManualNotAllowed_shouldDisablePref() {
         // Make sure not disabled by admin.
-        mPreference.setDisabledByAdmin(null);
+        mPreference.setDisabledByAdmin((RestrictedLockUtils.EnforcedAdmin) null);
 
         TimeZoneCapabilitiesAndConfig capabilitiesAndConfig = createCapabilitiesAndConfig(
             /* suggestManualAllowed= */false);
@@ -87,7 +89,7 @@ public class TimeZonePreferenceControllerTest {
     @Test
     public void updateState_suggestManualAllowed_shouldEnablePref() {
         // Make sure not disabled by admin.
-        mPreference.setDisabledByAdmin(null);
+        mPreference.setDisabledByAdmin((RestrictedLockUtils.EnforcedAdmin) null);
 
         TimeZoneCapabilitiesAndConfig capabilitiesAndConfig = createCapabilitiesAndConfig(
             /* suggestManualAllowed= */true);
@@ -98,7 +100,7 @@ public class TimeZonePreferenceControllerTest {
         assertThat(mPreference.isEnabled()).isTrue();
     }
 
-    private static TimeZoneCapabilitiesAndConfig createCapabilitiesAndConfig(
+    static TimeZoneCapabilitiesAndConfig createCapabilitiesAndConfig(
             boolean suggestManualAllowed) {
         TimeZoneDetectorStatus status = new TimeZoneDetectorStatus(DETECTOR_STATUS_RUNNING,
                 new TelephonyTimeZoneAlgorithmStatus(DETECTION_ALGORITHM_STATUS_RUNNING),
@@ -113,10 +115,12 @@ public class TimeZonePreferenceControllerTest {
                 .setUseLocationEnabled(useLocationEnabled)
                 .setConfigureGeoDetectionEnabledCapability(Capabilities.CAPABILITY_NOT_SUPPORTED)
                 .setSetManualTimeZoneCapability(suggestManualCapability)
+                .setConfigureNotificationsEnabledCapability(CAPABILITY_POSSESSED)
                 .build();
         TimeZoneConfiguration config = new TimeZoneConfiguration.Builder()
                 .setAutoDetectionEnabled(!suggestManualAllowed)
                 .setGeoDetectionEnabled(false)
+                .setNotificationsEnabled(true)
                 .build();
         return new TimeZoneCapabilitiesAndConfig(status, capabilities, config);
     }

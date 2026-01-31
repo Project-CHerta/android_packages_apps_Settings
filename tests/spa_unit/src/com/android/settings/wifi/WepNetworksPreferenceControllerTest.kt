@@ -17,6 +17,7 @@
 package com.android.settings.wifi
 
 import android.content.Context
+import android.content.Intent
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import androidx.compose.ui.test.assertIsOff
@@ -43,9 +44,12 @@ import org.mockito.Mockito
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doNothing
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.stub
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
 
 @RunWith(AndroidJUnit4::class)
 class WepNetworksPreferenceControllerTest {

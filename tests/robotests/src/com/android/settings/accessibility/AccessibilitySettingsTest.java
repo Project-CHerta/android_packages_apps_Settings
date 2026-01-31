@@ -16,6 +16,8 @@
 
 package com.android.settings.accessibility;
 
+import static com.android.internal.accessibility.common.ShortcutConstants.UserShortcutType.SOFTWARE;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -37,13 +39,11 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.database.ContentObserver;
 import android.os.Build;
-import android.platform.test.annotations.DisableFlags;
-import android.platform.test.annotations.EnableFlags;
-import android.platform.test.flag.junit.SetFlagsRule;
 import android.provider.Settings;
 import android.view.accessibility.AccessibilityManager;
 
 import androidx.fragment.app.Fragment;
+import androidx.preference.Preference;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.android.internal.accessibility.util.AccessibilityUtils;
@@ -111,7 +111,6 @@ public class AccessibilitySettingsTest {
 
     @Rule
     public final MockitoRule mocks = MockitoJUnit.rule();
-    @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
     private final Context mContext = ApplicationProvider.getApplicationContext();
     @Spy
     private final AccessibilityServiceInfo mServiceInfo = getMockAccessibilityServiceInfo(
@@ -119,7 +118,9 @@ public class AccessibilitySettingsTest {
     private ShadowAccessibilityManager mShadowAccessibilityManager;
     @Mock
     private LocalBluetoothManager mLocalBluetoothManager;
+
     private ActivityController<SettingsActivity> mActivityController;
+
     private AccessibilitySettings mFragment;
 
     @Before
@@ -156,22 +157,8 @@ public class AccessibilitySettingsTest {
         assertThat(indexableRawList).isNull();
     }
 
-    @DisableFlags(Flags.FLAG_FIX_A11Y_SETTINGS_SEARCH)
     @Test
-    public void getDynamicRawDataToIndex_hasInstalledA11yFeatures_flagOff_returnEmpty() {
-        mShadowAccessibilityManager.setInstalledAccessibilityServiceList(
-                List.of(mServiceInfo));
-        mShadowAccessibilityManager.setInstalledAccessibilityShortcutListAsUser(
-                List.of(getMockAccessibilityShortcutInfo()));
-
-        assertThat(AccessibilitySettings.SEARCH_INDEX_DATA_PROVIDER.getDynamicRawDataToIndex(
-                mContext, /* enabled= */ true))
-                .isEmpty();
-    }
-
-    @EnableFlags(Flags.FLAG_FIX_A11Y_SETTINGS_SEARCH)
-    @Test
-    public void getDynamicRawDataToIndex_hasInstalledA11yFeatures_flagOn_returnRawDataForInstalledA11yFeatures() {
+    public void getDynamicRawDataToIndex_hasInstalledA11yFeatures_returnRawDataForInstalledA11yFeatures() {
         mShadowAccessibilityManager.setInstalledAccessibilityServiceList(
                 List.of(mServiceInfo));
         mShadowAccessibilityManager.setInstalledAccessibilityShortcutListAsUser(
@@ -355,27 +342,6 @@ public class AccessibilitySettingsTest {
     }
 
     @Test
-    public void getServiceDescription_serviceCrash_showsStopped() {
-        mServiceInfo.crashed = true;
-
-        String description = AccessibilitySettings.getServiceDescription(mContext,
-                mServiceInfo, SERVICE_ENABLED).toString();
-
-        assertThat(description).isEqualTo(
-                mContext.getString(R.string.accessibility_description_state_stopped));
-    }
-
-    @Test
-    public void getServiceDescription_haveDescription_showsDescription() {
-        doReturn(DEFAULT_DESCRIPTION).when(mServiceInfo).loadDescription(any());
-
-        String description = AccessibilitySettings.getServiceDescription(mContext,
-                mServiceInfo, SERVICE_ENABLED).toString();
-
-        assertThat(description).isEqualTo(DEFAULT_DESCRIPTION);
-    }
-
-    @Test
     public void onCreate_haveRegisterToSpecificUrisAndActions() {
         setupFragment();
 
@@ -492,18 +458,17 @@ public class AccessibilitySettingsTest {
         setupFragment();
 
         // Both service and activity preferences should exist on the page.
-        RestrictedPreference servicePref = mFragment.getPreferenceScreen().findPreference(
+        Preference servicePref = mFragment.getPreferenceScreen().findPreference(
                 a11yServiceInfo.getComponentName().flattenToString());
-        RestrictedPreference activityPref = mFragment.getPreferenceScreen().findPreference(
+        Preference activityPref = mFragment.getPreferenceScreen().findPreference(
                 a11yShortcutInfo.getComponentName().flattenToString());
         assertThat(servicePref).isNotNull();
         assertThat(activityPref).isNotNull();
     }
 
     private String getPreferenceCategory(ComponentName componentName) {
-        return mFragment.mServicePreferenceToPreferenceCategoryMap.get(
-                        mFragment.getPreferenceScreen().findPreference(
-                                componentName.flattenToString())).getKey();
+        return mFragment.getPreferenceScreen().findPreference(
+                componentName.flattenToString()).getParent().getKey();
     }
 
     private AccessibilityServiceInfo getMockAccessibilityServiceInfo(ComponentName componentName) {
@@ -564,9 +529,8 @@ public class AccessibilitySettingsTest {
     }
 
     private void setShortcutEnabled(ComponentName componentName, boolean enabled) {
-        Settings.Secure.putString(mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS,
-                enabled ? componentName.flattenToString() : "");
+        mShadowAccessibilityManager.setAccessibilityShortcutTargets(
+                SOFTWARE, (enabled) ? List.of(componentName.flattenToString()) : List.of());
     }
 
     private BooleanSubject assertUriObserversContainsClazz(

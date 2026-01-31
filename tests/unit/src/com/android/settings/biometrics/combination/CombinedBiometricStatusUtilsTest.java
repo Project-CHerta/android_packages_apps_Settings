@@ -26,6 +26,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 
 import android.app.admin.DevicePolicyManager;
+import android.app.supervision.SupervisionManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -34,6 +35,10 @@ import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.platform.test.annotations.EnableFlags;
+import android.platform.test.annotations.RequiresFlagsDisabled;
+import android.platform.test.flag.junit.CheckFlagsRule;
+import android.platform.test.flag.junit.DeviceFlagsValueProvider;
 import android.platform.test.flag.junit.SetFlagsRule;
 
 import androidx.test.core.app.ApplicationProvider;
@@ -70,11 +75,15 @@ public class CombinedBiometricStatusUtilsTest {
     private FingerprintManager mFingerprintManager;
     @Mock
     private FaceManager mFaceManager;
+    @Mock
+    private SupervisionManager mSupervisionManager;
 
     private Context mApplicationContext;
     private CombinedBiometricStatusUtils mCombinedBiometricStatusUtils;
     @Rule
     public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
+    @Rule
+    public final CheckFlagsRule mCheckFlagsRule = DeviceFlagsValueProvider.createCheckFlagsRule();
 
     @Before
     public void setUp() {
@@ -83,13 +92,13 @@ public class CombinedBiometricStatusUtilsTest {
         when(mApplicationContext.getPackageManager()).thenReturn(mPackageManager);
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT)).thenReturn(true);
         when(mPackageManager.hasSystemFeature(PackageManager.FEATURE_FACE)).thenReturn(true);
-        when(mDevicePolicyManager.getProfileOwnerOrDeviceOwnerSupervisionComponent(USER_HANDLE))
-                .thenReturn(COMPONENT_NAME);
         when(mApplicationContext.getSystemService(Context.FINGERPRINT_SERVICE))
                 .thenReturn(mFingerprintManager);
         when(mApplicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE))
                 .thenReturn(mDevicePolicyManager);
         when(mApplicationContext.getSystemService(Context.FACE_SERVICE)).thenReturn(mFaceManager);
+        when(mApplicationContext.getSystemService(Context.SUPERVISION_SERVICE))
+                .thenReturn(mSupervisionManager);
         mCombinedBiometricStatusUtils = new CombinedBiometricStatusUtils(
                 mApplicationContext, USER_ID);
     }
@@ -175,7 +184,10 @@ public class CombinedBiometricStatusUtilsTest {
     }
 
     @Test
+    @RequiresFlagsDisabled(android.app.supervision.flags.Flags.FLAG_DEPRECATE_DPM_SUPERVISION_APIS)
     public void getDisabledAdmin_whenFingerprintDisabled_whenFaceDisabled_returnsEnforcedAdmin() {
+        when(mDevicePolicyManager.getProfileOwnerOrDeviceOwnerSupervisionComponent(USER_HANDLE))
+                .thenReturn(COMPONENT_NAME);
         when(mDevicePolicyManager.getKeyguardDisabledFeatures(COMPONENT_NAME))
                 .thenReturn(KEYGUARD_DISABLE_FACE | KEYGUARD_DISABLE_FINGERPRINT);
 
@@ -184,6 +196,21 @@ public class CombinedBiometricStatusUtilsTest {
 
         assertThat(admin).isEqualTo(new RestrictedLockUtils.EnforcedAdmin(
                 COMPONENT_NAME, UserManager.DISALLOW_BIOMETRIC, USER_HANDLE));
+    }
+
+    @Test
+    @EnableFlags(android.app.supervision.flags.Flags.FLAG_DEPRECATE_DPM_SUPERVISION_APIS)
+    public void getDisabledAdmin_whenFingerprintDisabled_whenFaceDisabled_returnsRestrictions() {
+        when(mSupervisionManager.isSupervisionEnabledForUser(USER_ID)).thenReturn(true);
+        when(mSupervisionManager.getActiveSupervisionAppPackage()).thenReturn("supervision.pkg");
+        when(mDevicePolicyManager.getKeyguardDisabledFeatures(null))
+                .thenReturn(KEYGUARD_DISABLE_FACE | KEYGUARD_DISABLE_FINGERPRINT);
+
+        final RestrictedLockUtils.EnforcedAdmin admin =
+                mCombinedBiometricStatusUtils.getDisablingAdmin();
+
+        assertThat(admin.enforcedRestriction).isEqualTo(UserManager.DISALLOW_BIOMETRIC);
+        assertThat(admin.user).isEqualTo(USER_HANDLE);
     }
 
     @Test
@@ -309,9 +336,7 @@ public class CombinedBiometricStatusUtilsTest {
     public void getPrivateProfileSettingsClassName_returnsPrivateSpaceBiometricSettings() {
         when(mFaceManager.hasEnrolledTemplates(anyInt())).thenReturn(false);
         mSetFlagsRule.enableFlags(
-                android.os.Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_BIOMETRICS_TO_UNLOCK_PRIVATE_SPACE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
+                android.multiuser.Flags.FLAG_ENABLE_BIOMETRICS_TO_UNLOCK_PRIVATE_SPACE);
 
         assertThat(mCombinedBiometricStatusUtils.getPrivateProfileSettingsClassName())
                 .isEqualTo(Settings.PrivateSpaceBiometricSettingsActivity.class.getName());

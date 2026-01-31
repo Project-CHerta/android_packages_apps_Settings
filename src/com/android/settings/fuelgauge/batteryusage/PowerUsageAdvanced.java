@@ -29,9 +29,13 @@ import android.provider.SearchIndexableResource;
 import android.util.Log;
 import android.util.Pair;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.loader.app.LoaderManager;
 import androidx.loader.content.Loader;
+import androidx.preference.PreferenceScreen;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.settings.R;
 import com.android.settings.SettingsActivity;
@@ -55,20 +59,22 @@ import java.util.concurrent.Executors;
 import java.util.function.Predicate;
 
 /** Advanced power usage. */
+// LINT.IfChange
 @SearchIndexable(forTarget = SearchIndexable.ALL & ~SearchIndexable.ARC)
 public class PowerUsageAdvanced extends PowerUsageBase {
     private static final String TAG = "AdvancedBatteryUsage";
     private static final String KEY_REFRESH_TYPE = "refresh_type";
     private static final String KEY_BATTERY_CHART = "battery_chart";
 
-    @VisibleForTesting BatteryHistoryPreference mHistPref;
+    @VisibleForTesting
+    BatteryHistoryPreference mHistPref;
 
     @VisibleForTesting
     final BatteryLevelDataLoaderCallbacks mBatteryLevelDataLoaderCallbacks =
             new BatteryLevelDataLoaderCallbacks();
 
     private boolean mIsChartDataLoaded = false;
-    private long mResumeTimestamp;
+    private long mStartTimestamp;
     private Map<Integer, Map<Integer, BatteryDiffData>> mBatteryUsageMap;
 
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
@@ -138,15 +144,27 @@ public class PowerUsageAdvanced extends PowerUsageBase {
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        mStartTimestamp = System.currentTimeMillis();
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
-        mResumeTimestamp = System.currentTimeMillis();
         final Uri uri = DatabaseUtils.BATTERY_CONTENT_URI;
         if (uri != null) {
             getContext()
                     .getContentResolver()
                     .registerContentObserver(uri, /*notifyForDescendants*/ true, mBatteryObserver);
         }
+    }
+
+    @Override
+    protected RecyclerView.Adapter onCreateAdapter(PreferenceScreen preferenceScreen) {
+        final RecyclerView.Adapter adapter = super.onCreateAdapter(preferenceScreen);
+        adapter.setHasStableIds(true);
+        return adapter;
     }
 
     @Override
@@ -196,7 +214,8 @@ public class PowerUsageAdvanced extends PowerUsageBase {
     }
 
     private void onBatteryLevelDataUpdate(BatteryLevelData batteryLevelData) {
-        if (!isResumed()) {
+        if (!isVisible() && !isResumed()) {
+            Log.w(TAG, "onBatteryLevelDataUpdate: fragment not ready");
             return;
         }
         mBatteryLevelData = Optional.ofNullable(batteryLevelData);
@@ -206,12 +225,17 @@ public class PowerUsageAdvanced extends PowerUsageBase {
                     TAG,
                     String.format(
                             "Battery chart shows in %d millis",
-                            System.currentTimeMillis() - mResumeTimestamp));
+                            System.currentTimeMillis() - mStartTimestamp));
         }
     }
 
     private void onBatteryDiffDataMapUpdate(Map<Long, BatteryDiffData> batteryDiffDataMap) {
-        if (!isResumed() || mBatteryLevelData == null) {
+        if (!isVisible() && !isResumed()) {
+            Log.w(TAG, "onBatteryDiffDataMapUpdate: fragment not ready");
+            return;
+        }
+        if (mBatteryLevelData == null) {
+            Log.w(TAG, "onBatteryDiffDataMapUpdate: batteryLevelData is null");
             return;
         }
         mHandler.post(() -> {
@@ -267,7 +291,7 @@ public class PowerUsageAdvanced extends PowerUsageBase {
                 TAG,
                 String.format(
                         "Battery usage list shows in %d millis",
-                        System.currentTimeMillis() - mResumeTimestamp));
+                        System.currentTimeMillis() - mStartTimestamp));
     }
 
     private void detectAnomaly() {
@@ -285,7 +309,12 @@ public class PowerUsageAdvanced extends PowerUsageBase {
     }
 
     private void onAnomalyDetected(PowerAnomalyEventList anomalyEventList) {
-        if (!isResumed() || anomalyEventList == null) {
+        if (!isVisible() && !isResumed()) {
+            Log.w(TAG, "onAnomalyDetected: fragment not ready");
+            return;
+        }
+        if (anomalyEventList == null) {
+            Log.d(TAG, "onAnomalyDetected: anomalyEventList is null");
             return;
         }
         logPowerAnomalyEventList(anomalyEventList);
@@ -503,9 +532,11 @@ public class PowerUsageAdvanced extends PowerUsageBase {
 
                 @Override
                 public BatteryLevelData loadInBackground() {
+                    Context context = getContext();
                     return DataProcessManager.getBatteryLevelData(
-                            getContext(),
-                            new UserIdsSeries(getContext(), /* isNonUIRequest= */ false),
+                            context,
+                            getLifecycle(),
+                            new UserIdsSeries(context, /* isNonUIRequest= */ false),
                             /* isFromPeriodJob= */ false,
                             PowerUsageAdvanced.this::onBatteryDiffDataMapUpdate);
                 }
@@ -521,4 +552,10 @@ public class PowerUsageAdvanced extends PowerUsageBase {
         @Override
         public void onLoaderReset(Loader<BatteryLevelData> loader) {}
     }
+
+    @Override
+    public @Nullable String getPreferenceScreenBindingKey(@NonNull Context context) {
+        return PowerUsageAdvancedScreen.KEY;
+    }
 }
+// LINT.ThenChange(PowerUsageAdvancedScreen.kt)

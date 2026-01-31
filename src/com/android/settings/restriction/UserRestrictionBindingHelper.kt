@@ -17,52 +17,65 @@
 package com.android.settings.restriction
 
 import android.content.Context
-import com.android.settings.PreferenceRestrictionMixin
+import androidx.lifecycle.lifecycleScope
+import androidx.preference.PreferenceFragmentCompat
 import com.android.settingslib.datastore.HandlerExecutor
 import com.android.settingslib.datastore.KeyedObserver
+import com.android.settingslib.metadata.PreferenceChangeReason
+import com.android.settingslib.metadata.PreferenceHierarchyNode
 import com.android.settingslib.preference.PreferenceScreenBindingHelper
-import com.android.settingslib.preference.PreferenceScreenBindingHelper.Companion.CHANGE_REASON_STATE
 
 /** Helper to rebind preference immediately when user restriction is changed. */
 class UserRestrictionBindingHelper(
-    context: Context,
+    fragment: PreferenceFragmentCompat,
     private val screenBindingHelper: PreferenceScreenBindingHelper,
-) : AutoCloseable {
-    private val restrictionKeysToPreferenceKeys: Map<String, MutableSet<String>> =
-        mutableMapOf<String, MutableSet<String>>()
-            .apply {
-                screenBindingHelper.forEachRecursively {
-                    val metadata = it.metadata
-                    if (metadata is PreferenceRestrictionMixin) {
-                        for (restrictionKey in metadata.restrictionKeys) {
-                            getOrPut(restrictionKey) { mutableSetOf() }.add(metadata.key)
-                        }
-                    }
-                }
-            }
-            .toMap()
-
-    private val userRestrictionObserver: KeyedObserver<String?>?
+) : KeyedObserver<String>, AutoCloseable {
+    private val context: Context = fragment.requireContext()
+    private val restrictionKeysToPreferenceKeys = mutableMapOf<String, MutableSet<String>>()
 
     init {
-        if (restrictionKeysToPreferenceKeys.isEmpty()) {
-            userRestrictionObserver = null
-        } else {
-            val observer =
-                KeyedObserver<String?> { restrictionKey, _ ->
-                    restrictionKey?.let { notifyRestrictionChanged(it) }
-                }
-            UserRestrictions.addObserver(context, observer, HandlerExecutor.main)
-            userRestrictionObserver = observer
+        screenBindingHelper.forEachAsyncRecursively(::addNode, fragment.lifecycleScope) { _, node ->
+            // node is added to hierarchy in async manner
+            addNode(node)
         }
     }
 
-    private fun notifyRestrictionChanged(restrictionKey: String) {
+    private fun addNode(node: PreferenceHierarchyNode) {
+        val metadata = node.metadata
+        val restrictionKeys =
+            (metadata as? PreferenceRestrictionMixin)?.restrictionKeys ?: emptyArray()
+        if (restrictionKeys.isEmpty()) return
+        val userRestrictions = UserRestrictions.get(context)
+        val executor = HandlerExecutor.main
+        fun addObserver(restrictionKey: String) =
+            userRestrictions.addObserver(
+                restrictionKey,
+                this@UserRestrictionBindingHelper,
+                executor,
+            )
+        val key = metadata.key
+        for (restrictionKey in restrictionKeys) {
+            restrictionKeysToPreferenceKeys
+                .getOrPut(restrictionKey) {
+                    addObserver(restrictionKey)
+                    mutableSetOf()
+                }
+                .add(key)
+        }
+    }
+
+    override fun onKeyChanged(restrictionKey: String, reason: Int) {
         val keys = restrictionKeysToPreferenceKeys[restrictionKey] ?: return
-        for (key in keys) screenBindingHelper.notifyChange(key, CHANGE_REASON_STATE)
+        for (key in keys) screenBindingHelper.notifyChange(key, PreferenceChangeReason.STATE)
     }
 
     override fun close() {
-        userRestrictionObserver?.let { UserRestrictions.removeObserver(it) }
+        val restrictionKeys = restrictionKeysToPreferenceKeys.keys
+        if (restrictionKeys.isNotEmpty()) {
+            val userRestrictions = UserRestrictions.get(context)
+            for (restrictionKey in restrictionKeys) {
+                userRestrictions.removeObserver(restrictionKey, this)
+            }
+        }
     }
 }

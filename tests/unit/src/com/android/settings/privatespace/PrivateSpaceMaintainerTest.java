@@ -36,9 +36,10 @@ import android.app.IActivityManager;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.os.Flags;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.platform.test.flag.junit.SetFlagsRule;
 import android.provider.Settings;
@@ -46,16 +47,19 @@ import android.provider.Settings;
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
+import com.android.compatibility.common.util.BlockingBroadcastReceiver;
 import com.android.settings.privatespace.PrivateSpaceMaintainer.ErrorDeletingPrivateSpace;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
+
+import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
 public class PrivateSpaceMaintainerTest {
@@ -82,8 +86,6 @@ public class PrivateSpaceMaintainerTest {
     /** Tests that {@link PrivateSpaceMaintainer#deletePrivateSpace()} deletes PS when PS exists. */
     @Test
     public void deletePrivateSpace_psExists_deletesPS() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -101,8 +103,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void deletePrivateSpace_psDoesNotExist_returnsNoPSError() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
         privateSpaceMaintainer.deletePrivateSpace();
@@ -116,8 +116,6 @@ public class PrivateSpaceMaintainerTest {
     /** Tests that {@link PrivateSpaceMaintainer#createPrivateSpace()} when PS exists creates PS. */
     @Test
     public void createPrivateSpace_psDoesNotExist_createsPS() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -132,8 +130,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_psExists_returnsFalse() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -149,8 +145,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_psDoesNotExist_resetsHidePSSettings() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -172,9 +166,7 @@ public class PrivateSpaceMaintainerTest {
     @Test
     public void createPrivateSpace_psDoesNotExist_setsDefaultPsSensitiveNotificationsValue() {
         mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PS_SENSITIVE_NOTIFICATIONS_TOGGLE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
+                android.multiuser.Flags.FLAG_ENABLE_PS_SENSITIVE_NOTIFICATIONS_TOGGLE);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -191,8 +183,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_psExists_doesNotResetHidePSSettings() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -209,8 +199,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void createPrivateSpace_psDoesNotExist_registersTheBroadcastReceiver() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
         privateSpaceMaintainer.deletePrivateSpace();
@@ -222,8 +210,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void deletePrivateSpace_psExists_unregistersTheBroadcastReceiver() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
         privateSpaceMaintainer.createPrivateSpace();
@@ -235,11 +221,8 @@ public class PrivateSpaceMaintainerTest {
      * Tests that {@link PrivateSpaceMaintainer#lockPrivateSpace()} when PS exists and is running
      * locks the private profile.
      */
-    @Ignore("Flaky pre-submit b/378392936")
     @Test
     public void lockPrivateSpace_psExistsAndPrivateProfileRunning_locksCreatedPrivateSpace() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -255,11 +238,8 @@ public class PrivateSpaceMaintainerTest {
      * Tests that {@link PrivateSpaceMaintainer#lockPrivateSpace()} when PS exist and private
      * profile not running returns false.
      */
-    @Ignore("Flaky pre-submit b/378392936")
     @Test
     public void lockPrivateSpace_psExistsAndPrivateProfileNotRunning_returnsFalse() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -281,8 +261,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void lockPrivateSpace_psDoesNotExist_returnsFalse() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
         assertThat(privateSpaceMaintainer.doesPrivateSpaceExist()).isFalse();
@@ -295,8 +273,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_psDoesNotExist_setsUserSetupComplete() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -310,8 +286,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_pSExists_doesNotChangeUserSetupSetting() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -327,10 +301,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_psDoesNotExist_resetsPSAutoLockSettings() {
-        mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_SUPPORT_AUTOLOCK_FOR_PRIVATE_SPACE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         final int autoLockOption = 2;
         PrivateSpaceMaintainer privateSpaceMaintainer =
@@ -352,10 +322,6 @@ public class PrivateSpaceMaintainerTest {
      */
     @Test
     public void createPrivateSpace_psExists_doesNotResetPSAutoLockSettings() {
-        mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_SUPPORT_AUTOLOCK_FOR_PRIVATE_SPACE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         final int privateSpaceAutLockValue = 1;
         PrivateSpaceMaintainer privateSpaceMaintainer =
@@ -373,9 +339,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void isPrivateSpaceEntryPointEnabled_psExistCanAddProfileTrue_returnsTrue() {
-        mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -387,9 +350,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void isPrivateSpaceEntryPointEnabled_psNotExistsCanAddProfileTrue_returnsTrue() {
-        mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -401,9 +361,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void isPrivateSpaceEntryPointEnabled_psExistsCanAddProfileFalse_returnsTrue() {
-        mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeFalse(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 spy(PrivateSpaceMaintainer.getInstance(mContext));
@@ -414,9 +371,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void isPrivateSpaceEntryPointEnabled_psNotExistsCanAddProfileFalse_returnsFalse() {
-        mSetFlagsRule.enableFlags(
-                Flags.FLAG_ALLOW_PRIVATE_PROFILE,
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeFalse(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -428,8 +382,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void createPrivateSpace_psDoesNotExist_setsSkipFirstUseHints() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -439,8 +391,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void createPrivateSpace_psDoesNotExist_setsPrivateSpaceSettingsComponentDisabled() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -469,8 +419,6 @@ public class PrivateSpaceMaintainerTest {
 
     @Test
     public void createPrivateSpace_pSExists_doesNotChangeSkipFirstUseHints() {
-        mSetFlagsRule.enableFlags(
-                android.multiuser.Flags.FLAG_ENABLE_PRIVATE_SPACE_FEATURES);
         assumeTrue(mContext.getSystemService(UserManager.class).canAddPrivateProfile());
         PrivateSpaceMaintainer privateSpaceMaintainer =
                 PrivateSpaceMaintainer.getInstance(mContext);
@@ -506,4 +454,25 @@ public class PrivateSpaceMaintainerTest {
                 /* enabled */ 1,
                 privateSpaceMaintainer.getPrivateProfileHandle().getIdentifier());
     }
+
+    @Test
+    public void profileRemovedFromUserManager_privateSpaceNoLongerExists() {
+        PrivateSpaceMaintainer privateSpaceMaintainer = PrivateSpaceMaintainer.getInstance(
+                mContext);
+        privateSpaceMaintainer.createPrivateSpace();
+        UserHandle privateSpaceUserHandle = privateSpaceMaintainer.getPrivateProfileHandle();
+        assertThat(privateSpaceMaintainer.doesPrivateSpaceExist()).isTrue();
+        Intent removedIntent = new Intent(Intent.ACTION_PROFILE_REMOVED);
+        assertThat(privateSpaceUserHandle).isNotNull();
+        final BlockingBroadcastReceiver receiver = new BlockingBroadcastReceiver(mContext,
+                removedIntent.getAction());
+        receiver.register();
+
+        Objects.requireNonNull(mContext.getSystemService(UserManager.class)).removeUser(
+                privateSpaceUserHandle);
+
+        receiver.awaitForBroadcast(TimeUnit.SECONDS.toMillis(10));
+        assertThat(privateSpaceMaintainer.doesPrivateSpaceExist()).isFalse();
+    }
+
 }

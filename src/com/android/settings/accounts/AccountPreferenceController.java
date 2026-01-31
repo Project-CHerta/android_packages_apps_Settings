@@ -46,7 +46,6 @@ import android.content.pm.UserProperties;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
-import android.os.Flags;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.text.BidiFormatter;
@@ -194,9 +193,6 @@ public class AccountPreferenceController extends AbstractPreferenceController
 
     @Override
     public void updateDynamicRawDataToIndex(List<SearchIndexableRaw> rawData) {
-        if (!isAvailable()) {
-            return;
-        }
         final Resources res = mContext.getResources();
         final String screenTitle = res.getString(R.string.account_settings_title);
 
@@ -288,12 +284,6 @@ public class AccountPreferenceController extends AbstractPreferenceController
     }
 
     private void updateUi() {
-        if (!isAvailable()) {
-            // This should not happen
-            Log.e(TAG, "We should not be showing settings for a managed profile");
-            return;
-        }
-
         for (int i = 0, size = mProfiles.size(); i < size; i++) {
             mProfiles.valueAt(i).pendingRemoval = true;
         }
@@ -312,10 +302,10 @@ public class AccountPreferenceController extends AbstractPreferenceController
                 // should be shown or not.
                 if (((profile.isManagedProfile()
                         && (mType & ProfileSelectFragment.ProfileType.WORK) != 0)
-                        || (isPrivateProfile(profile)
+                        || (profile.isPrivateProfile()
                             && (mType & ProfileSelectFragment.ProfileType.PRIVATE) != 0)
                         || (!profile.isManagedProfile()
-                            && !isPrivateProfile(profile)
+                            && !profile.isPrivateProfile()
                             && (mType & ProfileSelectFragment.ProfileType.PERSONAL) != 0))
                         && !(mUm.getUserProperties(profile.getUserHandle())
                             .getShowInQuietMode() == UserProperties.SHOW_IN_QUIET_MODE_HIDDEN
@@ -336,12 +326,6 @@ public class AccountPreferenceController extends AbstractPreferenceController
 
         // Refresh for the auto-sync preferences
         mFragment.forceUpdatePreferences();
-    }
-
-    private static boolean isPrivateProfile(UserInfo profile) {
-        return Flags.allowPrivateProfile()
-                && android.multiuser.Flags.enablePrivateSpaceFeatures()
-                && profile.isPrivateProfile();
     }
 
     private void updateProfileUi(final UserInfo userInfo) {

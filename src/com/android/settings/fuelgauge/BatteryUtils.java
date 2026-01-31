@@ -62,6 +62,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DecimalStyle;
 import java.time.format.FormatStyle;
 
 /** Utils for battery operation */
@@ -223,10 +224,16 @@ public class BatteryUtils {
     public boolean shouldHideUidBatteryConsumerUnconditionally(
             UidBatteryConsumer consumer, String[] packages) {
         final int uid = consumer.getUid();
+        if (android.content.pm.Flags.removeHiddenModuleUsage()) {
+            return uid == UID_TETHERING ? false : uid < 0;
+        }
         return uid == UID_TETHERING ? false : uid < 0 || isHiddenSystemModule(packages);
     }
 
-    /** Returns true if one the specified packages belongs to a hidden system module. */
+    /**
+     * Returns true if one the specified packages belongs to a hidden system module.
+     * TODO(b/382016780): to be removed after flag cleanup.
+     */
     public boolean isHiddenSystemModule(String[] packages) {
         if (packages != null) {
             for (int i = 0, length = packages.length; i < length; i++) {
@@ -439,7 +446,12 @@ public class BatteryUtils {
         try {
             batteryUsageStats =
                     systemService.getBatteryUsageStats(
-                            new BatteryUsageStatsQuery.Builder().includeBatteryHistory().build());
+                            new BatteryUsageStatsQuery
+                                    .Builder()
+                                    .includeBatteryHistory()
+                                    .accumulated()
+                                    .build()
+                    );
         } catch (RuntimeException e) {
             Log.e(TAG, "getBatteryInfo() error from getBatteryUsageStats()", e);
             // Use default BatteryUsageStats.
@@ -668,7 +680,8 @@ public class BatteryUtils {
         final String localDate =
                 instant.atZone(ZoneId.systemDefault())
                         .toLocalDate()
-                        .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG));
+                        .format(DateTimeFormatter.ofLocalizedDate(FormatStyle.LONG)
+                                .withDecimalStyle(DecimalStyle.ofDefaultLocale()));
 
         return localDate;
     }

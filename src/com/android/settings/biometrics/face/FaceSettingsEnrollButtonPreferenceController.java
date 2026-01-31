@@ -19,15 +19,18 @@ package com.android.settings.biometrics.face;
 import static com.android.settings.Utils.SETTINGS_PACKAGE_NAME;
 
 import android.app.admin.DevicePolicyManager;
+import android.app.admin.PolicyEnforcementInfo;
 import android.content.Context;
 import android.content.Intent;
 import android.view.View;
 import android.widget.Button;
 
+import androidx.annotation.NonNull;
 import androidx.preference.Preference;
 
 import com.android.settings.R;
 import com.android.settings.core.BasePreferenceController;
+import com.android.settings.flags.Flags;
 import com.android.settings.password.ChooseLockSettingsHelper;
 import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.android.settingslib.widget.LayoutPreference;
@@ -39,10 +42,11 @@ import com.google.android.setupdesign.util.PartnerStyleHelper;
  * Preference controller that allows a user to enroll their face.
  */
 public class FaceSettingsEnrollButtonPreferenceController extends BasePreferenceController
-        implements View.OnClickListener {
+        implements View.OnClickListener, Preference.OnPreferenceClickListener {
 
     private static final String TAG = "FaceSettings/Remove";
     static final String KEY = "security_settings_face_enroll_faces_container";
+    static final String KEY_1 = "security_settings_face_enroll";
 
     private final Context mContext;
 
@@ -53,7 +57,7 @@ public class FaceSettingsEnrollButtonPreferenceController extends BasePreference
     private Listener mListener;
 
     public FaceSettingsEnrollButtonPreferenceController(Context context) {
-        this(context, KEY);
+        this(context, Flags.biometricsOnboardingEducation() ? KEY_1 : KEY);
     }
 
     public FaceSettingsEnrollButtonPreferenceController(Context context, String preferenceKey) {
@@ -62,28 +66,40 @@ public class FaceSettingsEnrollButtonPreferenceController extends BasePreference
     }
 
     @Override
-    public void updateState(Preference preference) {
+    public void updateState(@NonNull Preference preference) {
         super.updateState(preference);
+        final boolean isAdminBlockingAuth = isAdminRestricted();
 
-        mButton = ((LayoutPreference) preference).findViewById(
-                R.id.security_settings_face_settings_enroll_button);
+        if (Flags.biometricsOnboardingEducation()) {
+            preference.setEnabled(!isAdminBlockingAuth);
+        } else {
+            mButton = ((LayoutPreference) preference).findViewById(
+                    R.id.security_settings_face_settings_enroll_button);
 
-        if (PartnerStyleHelper.shouldApplyPartnerResource(mButton)) {
-            ButtonStyler.applyPartnerCustomizationPrimaryButtonStyle(mContext, mButton);
+            if (PartnerStyleHelper.shouldApplyPartnerResource(mButton)) {
+                ButtonStyler.applyPartnerCustomizationPrimaryButtonStyle(mContext, mButton);
+            }
+
+            mButton.setOnClickListener(this);
+            mButton.setEnabled(!isAdminBlockingAuth);
         }
-
-        mButton.setOnClickListener(this);
-        final boolean isDeviceOwnerBlockingAuth =
-                RestrictedLockUtilsInternal.checkIfKeyguardFeaturesDisabled(
-                        mContext, DevicePolicyManager.KEYGUARD_DISABLE_FACE, mUserId) != null;
-        mButton.setEnabled(!isDeviceOwnerBlockingAuth);
     }
 
     @Override
     public void onClick(View v) {
+        startEnrolling();
+    }
+
+    @Override
+    public boolean onPreferenceClick(@NonNull Preference preference) {
+        startEnrolling();
+        return true;
+    }
+
+    private void startEnrolling() {
         mIsClicked = true;
         final Intent intent = new Intent();
-        intent.setClassName(SETTINGS_PACKAGE_NAME, FaceEnrollIntroduction.class.getName());
+        intent.setClassName(SETTINGS_PACKAGE_NAME, FaceEnroll.class.getName());
         intent.putExtra(Intent.EXTRA_USER_ID, mUserId);
         intent.putExtra(ChooseLockSettingsHelper.EXTRA_KEY_CHALLENGE_TOKEN, mToken);
         if (mListener != null) {
@@ -91,6 +107,18 @@ public class FaceSettingsEnrollButtonPreferenceController extends BasePreference
         } else {
             mContext.startActivity(intent);
         }
+    }
+
+    private boolean isAdminRestricted() {
+        if (android.app.admin.flags.Flags.policyTransparencyRefactorEnabled()
+                && android.app.admin.flags.Flags.setKeyguardDisabledFeaturesCoexistence()) {
+            final PolicyEnforcementInfo info =
+                    RestrictedLockUtilsInternal.getEnforcingAdminsForKeyguardFeatures(mContext,
+                            DevicePolicyManager.KEYGUARD_DISABLE_FACE, mUserId);
+            return info != null && info.getMostImportantEnforcingAdmin() != null;
+        }
+        return RestrictedLockUtilsInternal.checkIfKeyguardFeaturesDisabled(
+                mContext, DevicePolicyManager.KEYGUARD_DISABLE_FACE, mUserId) != null;
     }
 
     @Override

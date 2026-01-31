@@ -35,7 +35,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.robolectric.Shadows.shadowOf;
 
-import android.app.Flags;
 import android.app.settings.SettingsEnums;
 import android.content.Context;
 import android.content.Intent;
@@ -45,7 +44,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.SetFlagsRule;
 import android.service.notification.ZenPolicy;
 import android.view.LayoutInflater;
@@ -63,7 +61,6 @@ import com.android.settingslib.notification.modes.TestModeBuilder;
 import com.android.settingslib.notification.modes.ZenMode;
 import com.android.settingslib.notification.modes.ZenModesBackend;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.MoreExecutors;
 
 import org.junit.Before;
@@ -81,7 +78,6 @@ import java.util.Map;
 import java.util.Random;
 
 @RunWith(RobolectricTestRunner.class)
-@EnableFlags(Flags.FLAG_MODES_UI)
 public final class ZenModeAppsLinkPreferenceControllerTest {
 
     private ZenModeAppsLinkPreferenceController mController;
@@ -153,14 +149,18 @@ public final class ZenModeAppsLinkPreferenceControllerTest {
 
     @Test
     public void updateState_dnd_enabled() {
-        ZenMode dnd = TestModeBuilder.MANUAL_DND_ACTIVE;
+        ZenMode dnd = TestModeBuilder.MANUAL_DND;
         mController.updateState(mPreference, dnd);
         assertThat(mPreference.isEnabled()).isTrue();
     }
 
     @Test
     public void updateState_specialDnd_disabled() {
-        ZenMode specialDnd = TestModeBuilder.manualDnd(INTERRUPTION_FILTER_NONE, true);
+        ZenMode specialDnd = new TestModeBuilder()
+                .makeManualDnd()
+                .setInterruptionFilter(INTERRUPTION_FILTER_NONE)
+                .setActive(true)
+                .build();
         mController.updateState(mPreference, specialDnd);
         assertThat(mPreference.isEnabled()).isFalse();
     }

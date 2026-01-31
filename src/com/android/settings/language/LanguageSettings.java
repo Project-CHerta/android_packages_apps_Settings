@@ -25,6 +25,7 @@ import androidx.annotation.Nullable;
 
 import com.android.settings.R;
 import com.android.settings.dashboard.DashboardFragment;
+import com.android.settings.flags.Flags;
 import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settings.widget.PreferenceCategoryController;
 import com.android.settingslib.core.AbstractPreferenceController;
@@ -64,11 +65,6 @@ public class LanguageSettings extends DashboardFragment {
             return;
         }
         activity.setTitle(R.string.languages_settings);
-    }
-
-    @Override
-    public @Nullable String getPreferenceScreenBindingKey(@NonNull Context context) {
-        return LanguageSettingScreen.KEY;
     }
 
     @Override
@@ -116,6 +112,9 @@ public class LanguageSettings extends DashboardFragment {
                 }
                 @Override
                 protected boolean isPageSearchEnabled(Context context) {
+                    if (Flags.regionalPreferencesApiEnabled()) {
+                        return false;
+                    }
                     return true;
                 }
             };

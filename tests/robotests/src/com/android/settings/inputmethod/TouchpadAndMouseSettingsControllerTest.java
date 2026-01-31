@@ -16,13 +16,10 @@
 
 package com.android.settings.inputmethod;
 
-import static android.view.flags.Flags.enableVectorCursorA11ySettings;
-
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.junit.Assume.assumeTrue;
-
 import android.content.Context;
+import android.platform.test.flag.junit.SetFlagsRule;
 import android.view.InputDevice;
 
 import androidx.preference.Preference;
@@ -48,6 +45,8 @@ import org.robolectric.annotation.Config;
 })
 public class TouchpadAndMouseSettingsControllerTest {
     @Rule
+    public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
+    @Rule
     public MockitoRule rule = MockitoJUnit.rule();
 
     private static final String PREFERENCE_KEY = "trackpad_settings";
@@ -67,7 +66,6 @@ public class TouchpadAndMouseSettingsControllerTest {
     @Test
     public void updateState_setTitleBasedOnDeviceSource() {
         int deviceId = 1;
-        ShadowInputDevice.sDeviceIds = new int[]{deviceId};
         InputDevice device = ShadowInputDevice.makeInputDevicebyIdWithSources(deviceId,
                 InputDevice.SOURCE_TOUCHPAD);
         ShadowInputDevice.addDevice(deviceId, device);
@@ -80,35 +78,8 @@ public class TouchpadAndMouseSettingsControllerTest {
     }
 
     @Test
-    public void getAvailabilityStatus_isTouchpadAvailable() {
-        int deviceId = 1;
-        ShadowInputDevice.sDeviceIds = new int[]{deviceId};
-        InputDevice device = ShadowInputDevice.makeInputDevicebyIdWithSources(deviceId,
-                InputDevice.SOURCE_TOUCHPAD);
-        ShadowInputDevice.addDevice(deviceId, device);
-
-        assertThat(mController.getAvailabilityStatus())
-                .isEqualTo(BasePreferenceController.AVAILABLE);
-    }
-
-    @Test
-    public void getAvailabilityStatus_isMouseAvailable() {
-        assumeTrue(enableVectorCursorA11ySettings());
-
-        int deviceId = 1;
-        ShadowInputDevice.sDeviceIds = new int[]{deviceId};
-        InputDevice device = ShadowInputDevice.makeInputDevicebyIdWithSources(deviceId,
-                InputDevice.SOURCE_MOUSE);
-        ShadowInputDevice.addDevice(deviceId, device);
-
-        assertThat(mController.getAvailabilityStatus())
-                .isEqualTo(BasePreferenceController.AVAILABLE);
-    }
-
-    @Test
     public void getAvailabilityStatus_noMouseOrTouchpadUnavailable() {
         int deviceId = 1;
-        ShadowInputDevice.sDeviceIds = new int[]{deviceId};
         InputDevice device = ShadowInputDevice.makeInputDevicebyIdWithSources(deviceId,
                 InputDevice.SOURCE_UNKNOWN);
         ShadowInputDevice.addDevice(deviceId, device);

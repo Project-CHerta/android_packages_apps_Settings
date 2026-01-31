@@ -17,17 +17,20 @@
 package com.android.settings.inputmethod;
 
 import android.content.Context;
+import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.android.server.accessibility.Flags;
 import com.android.settings.R;
 
 import com.google.common.collect.ImmutableList;
@@ -38,10 +41,17 @@ import java.util.Locale;
 
 public class MouseKeysImageListAdapter extends
         RecyclerView.Adapter<MouseKeysImageListAdapter.MouseKeyImageViewHolder> {
-    private static final ImmutableList<Integer> DRAWABLE_LIST = ImmutableList.of(
-            R.drawable.mouse_keys_directional, R.drawable.mouse_keys_click,
-            R.drawable.mouse_keys_press_hold, R.drawable.mouse_keys_release,
-            R.drawable.mouse_keys_toggle_scroll, R.drawable.mouse_keys_release2);
+    private static final String LABEL_DELIMITER = ", ";
+    private static final ImmutableList<Integer> DRAWABLE_LIST =
+            Flags.enableMouseKeyEnhancement()
+            ? ImmutableList.of(
+                R.drawable.primary_keys_move, R.drawable.primary_keys_left_click,
+                R.drawable.primary_keys_click_and_hold, R.drawable.primary_keys_release,
+                R.drawable.primary_keys_scroll, R.drawable.primary_keys_right_click)
+            : ImmutableList.of(
+                R.drawable.mouse_keys_directional, R.drawable.mouse_keys_click,
+                R.drawable.mouse_keys_press_hold, R.drawable.mouse_keys_release,
+                R.drawable.mouse_keys_toggle_scroll, R.drawable.mouse_keys_release2);
     private static final ImmutableList<Integer> DIRECTIONAL_CHAR_KEYCODE_LIST = ImmutableList.of(
             KeyEvent.KEYCODE_7, KeyEvent.KEYCODE_8, KeyEvent.KEYCODE_9, KeyEvent.KEYCODE_U,
             KeyEvent.KEYCODE_O, KeyEvent.KEYCODE_J, KeyEvent.KEYCODE_K, KeyEvent.KEYCODE_L
@@ -75,6 +85,9 @@ public class MouseKeysImageListAdapter extends
 
     @Override
     public void onBindViewHolder(@NonNull MouseKeyImageViewHolder holder, int position) {
+        if (mComposedSummaryList.isEmpty()) {
+            return;
+        }
         ((MouseKeyImageViewHolder) holder).bindView(DRAWABLE_LIST.get(position),
                 mComposedSummaryList.get(position));
     }
@@ -93,7 +106,7 @@ public class MouseKeysImageListAdapter extends
         List<String> directionalLabelList = DIRECTIONAL_CHAR_KEYCODE_LIST.stream().map(
                 (key) -> getDisplayLabel(currentInputDevice, key)).toList();
         mComposedSummaryList.add(context.getString(R.string.mouse_keys_directional_summary,
-                String.join(",", directionalLabelList)));
+                String.join(LABEL_DELIMITER, directionalLabelList)));
         String leftClickLabel = getDisplayLabel(currentInputDevice, LEFT_CLICK_CHAR_KEYCODE);
         mComposedSummaryList.add(
                 context.getString(R.string.mouse_keys_click_summary, leftClickLabel));
@@ -107,7 +120,8 @@ public class MouseKeysImageListAdapter extends
                 (key) -> getDisplayLabel(currentInputDevice, key)).toList();
         mComposedSummaryList.add(context.getString(R.string.mouse_keys_toggle_scroll_summary,
                 toggleScrollLabelList.getFirst(),
-                String.join(",", toggleScrollLabelList.subList(1, toggleScrollLabelList.size()))
+                String.join(LABEL_DELIMITER,
+                        toggleScrollLabelList.subList(1, toggleScrollLabelList.size()))
         ));
         String rightClickLabel = getDisplayLabel(currentInputDevice, RIGHT_CLICK_CHAR_KEYCODE);
         mComposedSummaryList.add(
@@ -116,23 +130,29 @@ public class MouseKeysImageListAdapter extends
 
     private String getDisplayLabel(InputDevice currentInputDevice, int keycode) {
         return String.valueOf(currentInputDevice.getKeyCharacterMap().getDisplayLabel(
-                currentInputDevice.getKeyCodeForKeyLocation(keycode))).toLowerCase(Locale.ROOT);
+                currentInputDevice.getKeyCodeForKeyLocation(keycode))).toLowerCase(
+                Locale.getDefault());
     }
 
     public static class MouseKeyImageViewHolder extends RecyclerView.ViewHolder {
         private final TextView mTextView;
+        private final ImageView mImageView;
         private final Context mContext;
 
         public MouseKeyImageViewHolder(View itemView, Context context) {
             super(itemView);
-            mTextView = (TextView) itemView;
+            mTextView = itemView.findViewById(R.id.layout_description);
+            mImageView = itemView.findViewById(R.id.image);
+            if (Flags.enableMouseKeyEnhancement()) {
+                mTextView.setGravity(Gravity.START);
+                mImageView.setScaleType(ImageView.ScaleType.FIT_START);
+            }
             mContext = context;
         }
 
         void bindView(int drawableRes, String summary) {
             mTextView.setText(summary);
-            mTextView.setCompoundDrawablesWithIntrinsicBounds(null,
-                    mContext.getDrawable(drawableRes), null, null);
+            mImageView.setImageDrawable(mContext.getDrawable(drawableRes));
         }
     }
 }

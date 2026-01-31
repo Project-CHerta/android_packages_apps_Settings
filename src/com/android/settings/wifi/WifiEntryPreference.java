@@ -22,6 +22,7 @@ import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.StateListDrawable;
+import android.os.UserManager;
 import android.text.TextUtils;
 import android.view.View;
 import android.widget.ImageButton;
@@ -37,6 +38,7 @@ import androidx.preference.PreferenceViewHolder;
 import com.android.settingslib.R;
 import com.android.settingslib.RestrictedPreference;
 import com.android.settingslib.Utils;
+import com.android.settingslib.widget.SettingsThemeHelper;
 import com.android.settingslib.wifi.WifiUtils;
 import com.android.wifitrackerlib.HotspotNetworkEntry;
 import com.android.wifitrackerlib.WifiEntry;
@@ -82,8 +84,9 @@ public class WifiEntryPreference extends RestrictedPreference implements
     WifiEntryPreference(@NonNull Context context, @NonNull WifiEntry wifiEntry,
             @NonNull WifiUtils.InternetIconInjector iconInjector) {
         super(context);
-
-        setLayoutResource(R.layout.preference_access_point);
+        int layoutResId = SettingsThemeHelper.isExpressiveTheme(getContext())
+                ? R.layout.preference_access_point_expressive : R.layout.preference_access_point;
+        setLayoutResource(layoutResId);
         mFrictionSld = getFrictionStateListDrawable();
         mIconInjector = iconInjector;
         setWifiEntry(wifiEntry);
@@ -142,6 +145,20 @@ public class WifiEntryPreference extends RestrictedPreference implements
             if (frictionImageView != null) {
                 frictionImageView.setVisibility(View.GONE);
             }
+        } else if (displaySharedIcon()) {
+            if (frictionImageView != null) {
+                frictionImageView.setVisibility(View.VISIBLE);
+                final Drawable drawableShared =
+                        getDrawable(com.android.settings.R.drawable.ic_share);
+                drawableShared.setTintList(
+                        Utils.getColorAttr(getContext(), android.R.attr.colorControlNormal));
+                ((ImageView) frictionImageView).setImageDrawable(drawableShared);
+            }
+
+            if (imageButton != null) {
+                imageButton.setVisibility(View.VISIBLE);
+                bindFrictionImage(imageButton);
+            }
         } else {
             imageButton.setVisibility(View.GONE);
 
@@ -150,6 +167,21 @@ public class WifiEntryPreference extends RestrictedPreference implements
                 bindFrictionImage(frictionImageView);
             }
         }
+    }
+
+    private boolean displaySharedIcon() {
+        if (!com.android.settings.connectivity.Flags.wifiMultiuser()
+                || mWifiEntry.getConnectedState() == WifiEntry.CONNECTED_STATE_CONNECTED) {
+            return false;
+        }
+
+        UserManager userManager = getContext().getSystemService(UserManager.class);
+        if (userManager.getUserCount() <= 1) {
+            return false;
+        }
+
+        return (mWifiEntry.getWifiConfiguration() == null)
+                ? false : mWifiEntry.getWifiConfiguration().shared;
     }
 
     /**

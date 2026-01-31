@@ -21,14 +21,17 @@ import android.app.settings.SettingsEnums;
 import android.app.timedetector.TimeDetectorHelper;
 import android.content.Context;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.android.settings.R;
 import com.android.settings.dashboard.DashboardFragment;
-import com.android.settings.flags.Flags;
 import com.android.settings.search.BaseSearchIndexProvider;
 import com.android.settingslib.search.SearchIndexable;
 
 import com.google.android.setupcompat.util.WizardManagerHelper;
 
+// LINT.IfChange
 @SearchIndexable
 public class DateTimeSettings extends DashboardFragment implements
         TimePreferenceController.TimePreferenceHost, DatePreferenceController.DatePreferenceHost {
@@ -50,10 +53,12 @@ public class DateTimeSettings extends DashboardFragment implements
 
     @Override
     protected int getPreferenceScreenResId() {
-        if (Flags.revampToggles()) {
-            return R.xml.date_time_prefs_revamped;
-        }
         return R.xml.date_time_prefs;
+    }
+
+    @Override
+    public @Nullable String getPreferenceScreenBindingKey(@NonNull Context context) {
+        return DateTimeSettingsScreen.KEY;
     }
 
     @Override
@@ -78,6 +83,15 @@ public class DateTimeSettings extends DashboardFragment implements
                 use(TimeFeedbackPreferenceCategoryController.class);
         use(TimeFeedbackPreferenceController.class)
                 .registerWithOptionalCategoryController(helpAndFeedbackCategoryController);
+
+        // All the elements in the category are optional, so we must ensure the category is only
+        // available if any of the elements are available.
+        NotificationsPreferenceCategoryController
+                notificationsPreferenceCategoryController =
+                use(NotificationsPreferenceCategoryController.class);
+        use(TimeZoneNotificationsPreferenceController.class)
+                .registerIn(
+                        notificationsPreferenceCategoryController);
     }
 
     @Override
@@ -123,6 +137,6 @@ public class DateTimeSettings extends DashboardFragment implements
     }
 
     public static final BaseSearchIndexProvider SEARCH_INDEX_DATA_PROVIDER =
-            new BaseSearchIndexProvider(
-                    Flags.revampToggles() ? R.xml.date_time_prefs_revamped : R.xml.date_time_prefs);
+            new BaseSearchIndexProvider(R.xml.date_time_prefs);
 }
+// LINT.ThenChange(DateTimeSettingsScreen.kt)

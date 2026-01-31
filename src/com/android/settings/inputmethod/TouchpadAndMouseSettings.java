@@ -19,7 +19,6 @@ package com.android.settings.inputmethod;
 import android.app.settings.SettingsEnums;
 import android.content.Context;
 import android.os.Bundle;
-import android.util.FeatureFlagUtils;
 
 import androidx.annotation.NonNull;
 
@@ -36,7 +35,7 @@ public class TouchpadAndMouseSettings extends DashboardFragment {
     @Override
     public void onAttach(@NonNull Context context) {
         super.onAttach(context);
-        use(TouchGesturesButtonPreferenceController.class).setFragment(this /*parent*/);
+        use(TouchpadGesturesTutorialButtonPreferenceController.class).setFragment(this /*parent*/);
     }
 
     @Override
@@ -65,9 +64,7 @@ public class TouchpadAndMouseSettings extends DashboardFragment {
             new BaseSearchIndexProvider(R.xml.touchpad_and_mouse_settings) {
                 @Override
                 protected boolean isPageSearchEnabled(Context context) {
-                    return FeatureFlagUtils
-                            .isEnabled(context, FeatureFlagUtils.SETTINGS_NEW_KEYBOARD_TRACKPAD)
-                            && InputPeripheralsSettingsUtils.isTouchpad();
+                    return false;
                 }
             };
 }

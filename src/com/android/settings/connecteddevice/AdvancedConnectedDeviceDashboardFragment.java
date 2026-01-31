@@ -19,7 +19,11 @@ import android.app.settings.SettingsEnums;
 import android.content.Context;
 import android.provider.SearchIndexableResource;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.android.settings.R;
+import com.android.settings.connecteddevice.virtual.VirtualDeviceListController;
 import com.android.settings.dashboard.DashboardFragment;
 import com.android.settings.print.PrintSettingPreferenceController;
 import com.android.settings.search.BaseSearchIndexProvider;
@@ -35,6 +39,7 @@ import java.util.List;
 /**
  * This fragment contains all the advanced connection preferences(i.e, Bluetooth, NFC, USB..)
  */
+// LINT.IfChange
 @SearchIndexable(forTarget = SearchIndexable.ALL & ~SearchIndexable.ARC)
 public class AdvancedConnectedDeviceDashboardFragment extends DashboardFragment {
 
@@ -64,6 +69,11 @@ public class AdvancedConnectedDeviceDashboardFragment extends DashboardFragment 
     }
 
     @Override
+    public @Nullable String getPreferenceScreenBindingKey(@NonNull Context context) {
+        return AdvancedConnectedDeviceScreen.KEY;
+    }
+
+    @Override
     public void onAttach(Context context) {
         super.onAttach(context);
         UwbPreferenceController uwbPreferenceController = use(UwbPreferenceController.class);
@@ -74,6 +84,7 @@ public class AdvancedConnectedDeviceDashboardFragment extends DashboardFragment 
                 getSettingsLifecycle().addObserver(uwbPreferenceController);
             }
         }
+        use(VirtualDeviceListController.class).setFragment(this);
     }
 
     @Override
@@ -116,3 +127,4 @@ public class AdvancedConnectedDeviceDashboardFragment extends DashboardFragment 
                 }
             };
 }
+// LINT.ThenChange(AdvancedConnectedDeviceScreen.kt)

@@ -18,16 +18,13 @@ package com.android.settings.wifi
 
 import android.content.Context
 import android.net.wifi.WifiManager
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.android.settings.R
 import com.android.settings.spa.preference.ComposePreferenceController
@@ -60,27 +57,37 @@ class WepNetworksPreferenceController(context: Context, preferenceKey: String) :
             isWepSupportedFlow.collectAsStateWithLifecycle(initialValue = null).value
         val isWepAllowed: Boolean? =
             wepAllowedFlow.flow.collectAsStateWithLifecycle(initialValue = null).value
+
         var openDialog by rememberSaveable { mutableStateOf(false) }
+
         SwitchPreference(
             object : SwitchPreferenceModel {
                 override val title = stringResource(R.string.wifi_allow_wep_networks)
                 override val summary = { getSummary(isWepSupported) }
                 override val checked = {
-                    if (isWepSupported == true) isWepAllowed else isWepSupported
+                    if (isWepSupported == false) {
+                        false
+                    } else {
+                        isWepAllowed
+                    }
                 }
                 override val changeable: () -> Boolean
                     get() = { isWepSupported == true }
 
-                override val onCheckedChange: (Boolean) -> Unit = { newChecked ->
+                override val onCheckedChange: ((Boolean) -> Unit)? = { newChecked ->
                     val wifiInfo = wifiManager.connectionInfo
-                    if (!newChecked && wifiInfo.currentSecurityType == WifiEntry.SECURITY_WEP) {
+                    if (!newChecked &&
+                        wifiInfo.currentSecurityType == WifiEntry.SECURITY_WEP
+                    ) {
                         openDialog = true
                     } else {
                         wifiManager.setWepAllowed(newChecked)
                         wepAllowedFlow.override(newChecked)
                     }
                 }
-            })
+            }
+        )
+
         if (openDialog) {
             SettingsAlertDialogWithIcon(
                 onDismissRequest = { openDialog = false },
@@ -94,11 +101,7 @@ class WepNetworksPreferenceController(context: Context, preferenceKey: String) :
                     AlertDialogButton(stringResource(R.string.wifi_cancel)) { openDialog = false },
                 title = stringResource(R.string.wifi_settings_wep_networks_disconnect_title),
                 text = {
-                    Text(
-                        stringResource(R.string.wifi_settings_wep_networks_disconnect_summary),
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Center,
-                    )
+                    Text(stringResource(R.string.wifi_settings_wep_networks_disconnect_summary))
                 })
         }
     }

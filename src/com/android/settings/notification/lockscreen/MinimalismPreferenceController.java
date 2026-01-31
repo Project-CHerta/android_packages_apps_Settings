@@ -27,7 +27,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -52,7 +51,7 @@ public class MinimalismPreferenceController
     private static final int LS_SHOW_NOTIF_ON = 1;
     private static final int LS_SHOW_NOTIF_OFF = 0;
     private static final int LS_MINIMALISM_OFF = 0;
-    private static final int LS_MINIMALISM_ON = 1;
+    public static final int LS_MINIMALISM_ON = 1;
     private static final String KEY_MINIMALISM_PREFERENCE = "ls_minimalism";
     private static final String KEY_FULL_LIST_ILLUSTRATION = "full_list_illustration";
     private static final String KEY_COMPACT_ILLUSTRATION = "compact_illustration";
@@ -61,14 +60,10 @@ public class MinimalismPreferenceController
     private static final Uri URI_LOCK_SCREEN_SHOW_NOTIFICATIONS =
             Settings.Secure.getUriFor(LOCK_SCREEN_SHOW_NOTIFICATIONS);
 
-    @Nullable private LayoutPreference mPreference;
-    @Nullable private TextView mDescView;
+    @Nullable
+    private LayoutPreference mPreference;
     private Map<Integer, LinearLayout> mButtons = new HashMap<>();
     private Map<Integer, IllustrationPreference> mIllustrations = new HashMap<>();
-    private final Map<Integer, Integer> mDescriptionTexts = Map.ofEntries(
-            Map.entry(LS_MINIMALISM_OFF, R.string.lock_screen_notifs_full_list_desc),
-            Map.entry(LS_MINIMALISM_ON, R.string.lock_screen_notifs_compact_desc)
-    );
 
     private final ContentResolver mContentResolver;
 
@@ -130,7 +125,6 @@ public class MinimalismPreferenceController
     public void displayPreference(@NonNull PreferenceScreen screen) {
         super.displayPreference(screen);
         mPreference = screen.findPreference(KEY_MINIMALISM_PREFERENCE);
-        mDescView = mPreference.findViewById(R.id.notif_ls_style_desc);
 
         mButtons = Map.ofEntries(
                 Map.entry(LS_MINIMALISM_OFF,
@@ -157,20 +151,25 @@ public class MinimalismPreferenceController
     }
 
     private void highlightButton(int currentValue) {
-        mButtons.forEach((value, button) -> button.setSelected(currentValue == value));
+        mButtons.forEach(
+                (value, button) -> {
+                    button.setSelected(currentValue == value);
+                    // While selected, the button should be readable for screen-readers, and talk
+                    // back, but not clickable or showing number for voice control
+                    if (currentValue == value) {
+                        button.setClickable(false);
+                        button.setFocusable(false);
+                    } else {
+                        button.setClickable(true);
+                        button.setFocusable(true);
+                    }
+                }
+        );
     }
 
     private void highlightIllustration(int currentValue) {
         mIllustrations.forEach((value, preference)
                 -> preference.setVisible(currentValue == value));
-    }
-
-    private void highlightDescription(int value) {
-        if (mDescView == null) return;
-        Integer descStringId = mDescriptionTexts.get(value);
-        if (descStringId != null) {
-            mDescView.setText(descStringId);
-        }
     }
 
     private int getCurrentMinimalismValue() {
@@ -180,7 +179,12 @@ public class MinimalismPreferenceController
 
     private void refreshState(@Nullable Uri uri) {
         if (mPreference == null) return;
-        if (URI_LOCK_SCREEN_SHOW_NOTIFICATIONS.equals(uri) && !lockScreenShowNotification()) {
+        if (!Flags.notificationMinimalism()) {
+            // When minimalism flag is off, show the full list illustration
+            highlightIllustration(LS_MINIMALISM_OFF);
+            mPreference.setVisible(false);
+        } else if (URI_LOCK_SCREEN_SHOW_NOTIFICATIONS.equals(uri)
+                && !lockScreenShowNotification()) {
             // hide all preferences when showing notifications on lock screen is disabled
             mIllustrations.forEach((value, preference)
                     -> preference.setVisible(false));
@@ -190,7 +194,6 @@ public class MinimalismPreferenceController
             int currentValue = getCurrentMinimalismValue();
             highlightButton(currentValue);
             highlightIllustration(currentValue);
-            highlightDescription(currentValue);
         }
     }
 }

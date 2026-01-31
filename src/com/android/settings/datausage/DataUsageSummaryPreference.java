@@ -24,7 +24,6 @@ import android.telephony.SubscriptionPlan;
 import android.text.Spannable;
 import android.text.SpannableString;
 import android.text.TextUtils;
-import android.text.format.Formatter;
 import android.text.style.AbsoluteSizeSpan;
 import android.util.AttributeSet;
 import android.view.View;
@@ -39,8 +38,12 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
 import com.android.settings.R;
+import com.android.settings.datausage.lib.DataUsageFormatter;
 import com.android.settingslib.Utils;
+import com.android.settingslib.spaprivileged.framework.common.BytesFormatter;
 import com.android.settingslib.utils.StringUtil;
+import com.android.settingslib.widget.GroupSectionDividerMixin;
+import com.android.settingslib.widget.SettingsThemeHelper;
 
 import java.util.HashMap;
 import java.util.Locale;
@@ -51,7 +54,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Provides a summary of data usage.
  */
-public class DataUsageSummaryPreference extends Preference {
+public class DataUsageSummaryPreference extends Preference implements GroupSectionDividerMixin {
     private static final long MILLIS_IN_A_DAY = TimeUnit.DAYS.toMillis(1);
     private static final long WARNING_AGE = TimeUnit.HOURS.toMillis(6L);
     @VisibleForTesting
@@ -84,9 +87,20 @@ public class DataUsageSummaryPreference extends Preference {
     /** The number of bytes used since the start of the cycle. */
     private long mDataplanUse;
 
+    private boolean mIsExpressiveTheme;
+
     public DataUsageSummaryPreference(Context context, AttributeSet attrs) {
+        this(context, attrs, SettingsThemeHelper.isExpressiveTheme(context));
+    }
+
+    public DataUsageSummaryPreference(Context context, AttributeSet attrs,
+            boolean isExpressiveTheme) {
         super(context, attrs);
-        setLayoutResource(R.layout.data_usage_summary_preference);
+        mIsExpressiveTheme = isExpressiveTheme;
+        int resId = mIsExpressiveTheme
+                ? R.layout.data_usage_summary_preference_expressive
+                : R.layout.data_usage_summary_preference;
+        setLayoutResource(resId);
     }
 
     public void setLimitInfo(CharSequence text) {
@@ -144,7 +158,9 @@ public class DataUsageSummaryPreference extends Preference {
             bar.setVisibility(View.VISIBLE);
             getLabelBar(holder).setVisibility(View.VISIBLE);
             bar.setProgress((int) (mProgress * 100));
-            (getLabel1(holder)).setText(mStartLabel);
+            if (!mIsExpressiveTheme) {
+                (getLabel1(holder)).setText(mStartLabel);
+            }
             (getLabel2(holder)).setText(mEndLabel);
         } else {
             bar.setVisibility(View.GONE);
@@ -152,24 +168,29 @@ public class DataUsageSummaryPreference extends Preference {
         }
 
         updateDataUsageLabels(holder);
+        updateCycleTimeText(holder);
+
+        if (mIsExpressiveTheme) {
+            return;
+        }
 
         TextView usageTitle = getUsageTitle(holder);
         TextView carrierInfo = getCarrierInfo(holder);
         TextView limitInfo = getDataLimits(holder);
 
         usageTitle.setVisibility(mNumPlans > 1 ? View.VISIBLE : View.GONE);
-        updateCycleTimeText(holder);
         updateCarrierInfo(carrierInfo);
         limitInfo.setVisibility(TextUtils.isEmpty(mLimitInfoText) ? View.GONE : View.VISIBLE);
         limitInfo.setText(mLimitInfoText);
     }
 
     private void updateDataUsageLabels(PreferenceViewHolder holder) {
-        TextView usageNumberField = getDataUsed(holder);
+        DataUsageFormatter dataUsageFormatter = new DataUsageFormatter(getContext());
 
-        final Formatter.BytesResult usedResult = Formatter.formatBytes(getContext().getResources(),
-                mDataplanUse, Formatter.FLAG_CALCULATE_ROUNDED | Formatter.FLAG_IEC_UNITS);
-        final SpannableString usageNumberText = new SpannableString(usedResult.value);
+        TextView usageNumberField = getDataUsed(holder);
+        final BytesFormatter.Result usedResult =
+                dataUsageFormatter.formatDataUsageWithUnits(mDataplanUse);
+        final SpannableString usageNumberText = new SpannableString(usedResult.getNumber());
         final int textSize =
                 getContext().getResources().getDimensionPixelSize(R.dimen.usage_number_text_size);
         usageNumberText.setSpan(new AbsoluteSizeSpan(textSize), 0, usageNumberText.length(),
@@ -177,7 +198,7 @@ public class DataUsageSummaryPreference extends Preference {
         CharSequence template = getContext().getText(R.string.data_used_formatted);
 
         CharSequence usageText =
-                TextUtils.expandTemplate(template, usageNumberText, usedResult.units);
+                TextUtils.expandTemplate(template, usageNumberText, usedResult.getUnits());
         usageNumberField.setText(usageText);
 
         final MeasurableLinearLayout layout = getLayout(holder);
@@ -188,13 +209,13 @@ public class DataUsageSummaryPreference extends Preference {
             if (dataRemaining >= 0) {
                 usageRemainingField.setText(
                         TextUtils.expandTemplate(getContext().getText(R.string.data_remaining),
-                                DataUsageUtils.formatDataUsage(getContext(), dataRemaining)));
+                                dataUsageFormatter.formatDataUsage(dataRemaining)));
                 usageRemainingField.setTextColor(
                         Utils.getColorAttr(getContext(), android.R.attr.colorAccent));
             } else {
                 usageRemainingField.setText(
                         TextUtils.expandTemplate(getContext().getText(R.string.data_overusage),
-                                DataUsageUtils.formatDataUsage(getContext(), -dataRemaining)));
+                                dataUsageFormatter.formatDataUsage(-dataRemaining)));
                 usageRemainingField.setTextColor(
                         Utils.getColorAttr(getContext(), android.R.attr.colorError));
             }
@@ -205,7 +226,7 @@ public class DataUsageSummaryPreference extends Preference {
     }
 
     private void updateCycleTimeText(PreferenceViewHolder holder) {
-        TextView cycleTime = getCycleTime(holder);
+        TextView cycleTime = mIsExpressiveTheme ? getLabel1(holder) : getCycleTime(holder);
 
         // Takes zero as a special case which value is never set.
         if (mCycleEndTimeMs == null) {

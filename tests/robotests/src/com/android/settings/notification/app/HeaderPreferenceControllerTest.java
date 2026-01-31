@@ -25,7 +25,9 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
+import static org.robolectric.Shadows.shadowOf;
 
+import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationChannelGroup;
 import android.app.NotificationManager;
@@ -34,6 +36,7 @@ import android.os.UserManager;
 import android.view.View;
 
 import androidx.fragment.app.FragmentActivity;
+import androidx.test.core.app.ApplicationProvider;
 
 import com.android.settings.dashboard.DashboardFragment;
 import com.android.settings.notification.NotificationBackend;
@@ -72,7 +75,8 @@ public class HeaderPreferenceControllerTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        ShadowApplication shadowApplication = ShadowApplication.getInstance();
+        ShadowApplication shadowApplication =
+                shadowOf((Application) ApplicationProvider.getApplicationContext());
         shadowApplication.setSystemService(Context.NOTIFICATION_SERVICE, mNm);
         shadowApplication.setSystemService(Context.USER_SERVICE, mUm);
         mContext = RuntimeEnvironment.application;
@@ -114,27 +118,6 @@ public class HeaderPreferenceControllerTest {
     }
 
     @Test
-    public void testGetLabel() {
-        NotificationBackend.AppRow appRow = new NotificationBackend.AppRow();
-        appRow.label = "bananas";
-        mController.onResume(appRow, null, null, null, null, null, null);
-        assertEquals(appRow.label, mController.getLabel());
-
-        NotificationChannelGroup group = new NotificationChannelGroup("id", "name");
-        mController.onResume(appRow, null, group, null, null, null, null);
-        assertEquals(appRow.label, mController.getLabel());
-
-        NotificationChannel channel = new NotificationChannel("cid", "cname", IMPORTANCE_NONE);
-        mController.onResume(appRow, channel, group, null, null, null, null);
-        assertEquals(channel.getName(), mController.getLabel());
-
-        NotificationChannel defaultChannel = new NotificationChannel(
-                NotificationChannel.DEFAULT_CHANNEL_ID, "", IMPORTANCE_NONE);
-        mController.onResume(appRow, defaultChannel, null, null, null, null, null);
-        assertEquals(appRow.label, mController.getLabel());
-    }
-
-    @Test
     public void testGetSummary() {
         NotificationBackend.AppRow appRow = new NotificationBackend.AppRow();
         appRow.label = "bananas";
@@ -146,16 +129,14 @@ public class HeaderPreferenceControllerTest {
         NotificationChannel channel = new NotificationChannel("cid", "cname", IMPORTANCE_NONE);
         mController.onResume(appRow, channel, group, null, null, null, null);
         assertTrue(mController.getSummary().toString().contains(group.getName()));
-        assertTrue(mController.getSummary().toString().contains(appRow.label));
 
         mController.onResume(appRow, channel, null, null, null, null, null);
         assertFalse(mController.getSummary().toString().contains(group.getName()));
-        assertTrue(mController.getSummary().toString().contains(appRow.label));
 
         NotificationChannel defaultChannel = new NotificationChannel(
                 NotificationChannel.DEFAULT_CHANNEL_ID, "", IMPORTANCE_NONE);
         mController.onResume(appRow, defaultChannel, null, null, null, null, null);
-        assertEquals(appRow.label, mController.getSummary());
+        assertEquals("", mController.getSummary());
     }
 
     @Test

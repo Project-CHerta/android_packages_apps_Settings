@@ -4,12 +4,14 @@ import static android.view.HapticFeedbackConstants.CLOCK_TICK;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.util.AttributeSet;
 import android.view.View;
 
+import com.android.settings.R;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -36,10 +38,11 @@ public class NotificationHistoryRecyclerView extends RecyclerView {
         super(context, attrs, defStyle);
 
         setLayoutManager(new LinearLayoutManager(getContext()));
-        addItemDecoration(new DividerItemDecoration(getContext(), LinearLayoutManager.VERTICAL));
         ItemTouchHelper touchHelper = new ItemTouchHelper(
                 new DismissTouchHelper(0, ItemTouchHelper.START | ItemTouchHelper.END));
         touchHelper.attachToRecyclerView(this);
+        addItemDecoration(new ItemSpacingDecoration(
+                context.getResources().getDimensionPixelSize(R.dimen.chartview_divider_width)));
     }
 
     public void setOnItemSwipeDeleteListener(OnItemSwipeDeleteListener listener) {

@@ -16,11 +16,14 @@
 
 package com.android.settings.fuelgauge.batteryusage;
 
+import static androidx.lifecycle.Lifecycle.Event.ON_RESUME;
+import static androidx.lifecycle.Lifecycle.Event.ON_STOP;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
@@ -41,9 +44,11 @@ import android.os.RemoteException;
 import android.os.UserManager;
 import android.text.format.DateUtils;
 
+import androidx.lifecycle.LifecycleOwner;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.android.settings.fuelgauge.batteryusage.db.AppUsageEventEntity;
+import com.android.settingslib.core.lifecycle.Lifecycle;
 
 import org.junit.After;
 import org.junit.Before;
@@ -78,20 +83,31 @@ public final class DataProcessManagerTest {
     private Context mContext;
     private DataProcessManager mDataProcessManager;
     private PausedExecutorService mExecutorService;
+    private LifecycleOwner mLifecycleOwner;
+    private Lifecycle mLifecycle;
 
-    @Mock private UserIdsSeries mUserIdsSeries;
-    @Mock private IUsageStatsManager mUsageStatsManager;
-    @Mock private UserManager mUserManager;
-    @Mock private BatteryStatsManager mBatteryStatsManager;
-    @Mock private BatteryUsageStats mBatteryUsageStats;
-    @Mock private Intent mIntent;
-    @Captor private ArgumentCaptor<BatteryUsageStatsQuery> mBatteryUsageStatsQueryCaptor;
+    @Mock
+    private UserIdsSeries mUserIdsSeries;
+    @Mock
+    private IUsageStatsManager mUsageStatsManager;
+    @Mock
+    private UserManager mUserManager;
+    @Mock
+    private BatteryStatsManager mBatteryStatsManager;
+    @Mock
+    private BatteryUsageStats mBatteryUsageStats;
+    @Mock
+    private Intent mIntent;
+    @Captor
+    private ArgumentCaptor<BatteryUsageStatsQuery> mBatteryUsageStatsQueryCaptor;
 
     @Before
     public void setUp() {
         mExecutorService = new PausedExecutorService();
         ShadowPausedAsyncTask.overrideExecutor(mExecutorService);
         mContext = spy(ApplicationProvider.getApplicationContext());
+        mLifecycleOwner = () -> mLifecycle;
+        mLifecycle = spy(new Lifecycle(mLifecycleOwner));
         DataProcessor.sTestSystemAppsPackageNames = Set.of();
         DataProcessor.sUsageStatsManager = mUsageStatsManager;
         doReturn(mContext).when(mContext).getApplicationContext();
@@ -110,6 +126,7 @@ public final class DataProcessManagerTest {
         mDataProcessManager =
                 new DataProcessManager(
                         mContext,
+                        null,
                         mUserIdsSeries,
                         /* isFromPeriodJob= */ false,
                         /* rawStartTimestamp= */ 0L,
@@ -130,6 +147,7 @@ public final class DataProcessManagerTest {
         final DataProcessManager dataProcessManager =
                 new DataProcessManager(
                         mContext,
+                        null,
                         mUserIdsSeries,
                         /* callbackFunction= */ null);
         assertThat(dataProcessManager.getShowScreenOnTime()).isFalse();
@@ -139,10 +157,10 @@ public final class DataProcessManagerTest {
     public void start_loadEmptyDatabaseAppUsageData() {
         final MatrixCursor cursor =
                 new MatrixCursor(
-                        new String[] {
-                            AppUsageEventEntity.KEY_UID,
-                            AppUsageEventEntity.KEY_PACKAGE_NAME,
-                            AppUsageEventEntity.KEY_TIMESTAMP
+                        new String[]{
+                                AppUsageEventEntity.KEY_UID,
+                                AppUsageEventEntity.KEY_PACKAGE_NAME,
+                                AppUsageEventEntity.KEY_TIMESTAMP
                         });
         DatabaseUtils.sFakeSupplier = () -> cursor;
         doReturn(true).when(mUserManager).isUserUnlocked(anyInt());
@@ -161,9 +179,270 @@ public final class DataProcessManagerTest {
 
     @Test
     public void start_loadExpectedAppUsageData() throws RemoteException {
+        final String packageName = "package";
+        final List<BatteryLevelData.PeriodBatteryLevelData> hourlyBatteryLevelsPerDay =
+                prepareUsageDataForSeveralDays(packageName);
+
+        final DataProcessManager dataProcessManager =
+                new DataProcessManager(
+                        mContext,
+                        null,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ false,
+                        /* rawStartTimestamp= */ 2L,
+                        /* lastFullChargeTimestamp= */ 1L,
+                        /* callbackFunction= */ null,
+                        hourlyBatteryLevelsPerDay,
+                        /* batteryHistoryMap= */ new HashMap<>());
+        dataProcessManager.start();
+        mExecutorService.runAll();
+        ShadowLooper.idleMainLooper();
+
+        assertResultForSeveralDays(dataProcessManager, packageName);
+    }
+
+    @Test
+    public void start_withLifecycleAlive_loadExpectedAppUsageData() throws RemoteException {
+        final String packageName = "package";
+        final List<BatteryLevelData.PeriodBatteryLevelData> hourlyBatteryLevelsPerDay =
+                prepareUsageDataForSeveralDays(packageName);
+
+        mLifecycle.handleLifecycleEvent(ON_RESUME);
+        final DataProcessManager dataProcessManager =
+                new DataProcessManager(
+                        mContext,
+                        mLifecycle,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ false,
+                        /* rawStartTimestamp= */ 2L,
+                        /* lastFullChargeTimestamp= */ 1L,
+                        /* callbackFunction= */ null,
+                        hourlyBatteryLevelsPerDay,
+                        /* batteryHistoryMap= */ new HashMap<>());
+        dataProcessManager.start();
+        mExecutorService.runAll();
+        ShadowLooper.idleMainLooper();
+
+        assertResultForSeveralDays(dataProcessManager, packageName);
+    }
+
+    @Test
+    public void start_withLifecycleEnd_loadExpectedAppUsageData() throws RemoteException {
+        final String packageName = "package";
+        final List<BatteryLevelData.PeriodBatteryLevelData> hourlyBatteryLevelsPerDay =
+                prepareUsageDataForSeveralDays(packageName);
+
+        mLifecycle.handleLifecycleEvent(ON_RESUME);
+        final DataProcessManager dataProcessManager =
+                new DataProcessManager(
+                        mContext,
+                        mLifecycle,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ false,
+                        /* rawStartTimestamp= */ 2L,
+                        /* lastFullChargeTimestamp= */ 1L,
+                        /* callbackFunction= */ null,
+                        hourlyBatteryLevelsPerDay,
+                        /* batteryHistoryMap= */ new HashMap<>());
+        dataProcessManager.start();
+        mLifecycle.handleLifecycleEvent(ON_STOP);
+        mExecutorService.runAll();
+        ShadowLooper.idleMainLooper();
+
+        assertThat(dataProcessManager.getIsCurrentAppUsageLoaded()).isFalse();
+        assertThat(dataProcessManager.getIsDatabaseAppUsageLoaded()).isFalse();
+        assertThat(dataProcessManager.getIsCurrentBatteryHistoryLoaded()).isFalse();
+    }
+
+    @Test
+    public void start_currentUserLocked_emptyAppUsageList() throws RemoteException {
+        final UsageEvents.Event event =
+                getUsageEvent(UsageEvents.Event.ACTIVITY_RESUMED, /* timestamp= */ 1, "package");
+        final List<UsageEvents.Event> events = new ArrayList<>();
+        events.add(event);
+        doReturn(getUsageEvents(events))
+                .when(mUsageStatsManager)
+                .queryEventsWithFilter(any(), anyString());
+        doReturn(true).when(mUserIdsSeries).isCurrentUserLocked();
+        final MatrixCursor cursor =
+                new MatrixCursor(
+                        new String[]{
+                                AppUsageEventEntity.KEY_UID,
+                                AppUsageEventEntity.KEY_PACKAGE_NAME,
+                                AppUsageEventEntity.KEY_TIMESTAMP
+                        });
+        // Adds fake data into the cursor.
+        cursor.addRow(new Object[]{101L, "app name1", 1001L});
+        DatabaseUtils.sFakeSupplier = () -> cursor;
+
+        mDataProcessManager.start();
+        mExecutorService.runAll();
+        ShadowLooper.idleMainLooper();
+
+        assertThat(mDataProcessManager.getAppUsageEventList()).isEmpty();
+        assertThat(mDataProcessManager.getAppUsagePeriodMap()).isNull();
+        assertThat(mDataProcessManager.getShowScreenOnTime()).isFalse();
+        // Verify that the loading flags are set to true for early return.
+        assertThat(mDataProcessManager.getIsCurrentAppUsageLoaded()).isTrue();
+        assertThat(mDataProcessManager.getIsDatabaseAppUsageLoaded()).isTrue();
+    }
+
+    @Test
+    public void start_loadCurrentAppUsageFails_setsFlagAndReturns() throws RemoteException {
+        // Arrange: Mock setup to simulate null UsageEvents for the current user,
+        // which should trigger an early return in loadCurrentAppUsageList.
+        doReturn(null)
+                .when(mUsageStatsManager)
+                .queryEventsWithFilter(any(), anyString());
+        doReturn(false).when(mUserIdsSeries).isCurrentUserLocked();
+        doReturn(true).when(mUserManager).isUserUnlocked(anyInt());
+        final int currentUserId = 123;
+        doReturn(currentUserId).when(mUserIdsSeries).getCurrentUserId();
+        doReturn(List.of(currentUserId)).when(mUserIdsSeries).getVisibleUserIds();
+
+        // Act: Start the data processing.
+        mDataProcessManager.start();
+        mExecutorService.runAll();
+        ShadowLooper.idleMainLooper();
+
+        // Assert: Verify that the loading flag is set to true despite the early return,
+        // ensuring the final callback is not blocked.
+        assertThat(mDataProcessManager.getIsCurrentAppUsageLoaded()).isTrue();
+        // Also assert that no app usage events were added from the current load.
+        assertThat(mDataProcessManager.getAppUsageEventList()).isEmpty();
+    }
+
+    @Test
+    public void getBatteryLevelData_emptyHistoryMap_returnNull() {
+        assertThat(
+                DataProcessManager.getBatteryLevelData(
+                        mContext,
+                        null,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ false,
+                        /* asyncResponseDelegate= */ null))
+                .isNull();
+        assertThat(
+                DataProcessManager.getBatteryLevelData(
+                        mContext,
+                        null,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ true,
+                        /* asyncResponseDelegate= */ null))
+                .isNull();
+    }
+
+    @Test
+    public void getBatteryLevelData_allDataInOneHour_returnExpectedResult() {
+        // The timestamps and the current time are within half hour before an even hour.
+        final long[] timestamps = {
+                DateUtils.HOUR_IN_MILLIS * 2 - 300L,
+                DateUtils.HOUR_IN_MILLIS * 2 - 200L,
+                DateUtils.HOUR_IN_MILLIS * 2 - 100L
+        };
+        final int[] levels = {100, 99, 98};
+        DataProcessManager.sFakeBatteryHistoryMap = createHistoryMap(timestamps, levels);
+        DataProcessor.sTestCurrentTimeMillis = timestamps[timestamps.length - 1];
+
+        final BatteryLevelData resultData =
+                DataProcessManager.getBatteryLevelData(
+                        mContext,
+                        null,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ false,
+                        /* asyncResponseDelegate= */ null);
+
+        final List<Long> expectedDailyTimestamps =
+                List.of(DateUtils.HOUR_IN_MILLIS * 2 - 300L, DateUtils.HOUR_IN_MILLIS * 2 - 100L);
+        final List<Integer> expectedDailyLevels = List.of(100, 66);
+        final List<List<Long>> expectedHourlyTimestamps = List.of(expectedDailyTimestamps);
+        final List<List<Integer>> expectedHourlyLevels = List.of(expectedDailyLevels);
+        verifyExpectedBatteryLevelData(
+                resultData,
+                expectedDailyTimestamps,
+                expectedDailyLevels,
+                expectedHourlyTimestamps,
+                expectedHourlyLevels);
+    }
+
+    @Test
+    public void getBatteryLevelData_returnExpectedResult() {
+        // Timezone GMT+8: 2022-01-01 00:00:00, 2022-01-01 01:00:00
+        final long[] timestamps = {1640966400000L, 1640970000000L};
+        final int[] levels = {100, 99};
+        DataProcessManager.sFakeBatteryHistoryMap = createHistoryMap(timestamps, levels);
+        DataProcessor.sTestCurrentTimeMillis = timestamps[timestamps.length - 1];
+
+        final BatteryLevelData resultData =
+                DataProcessManager.getBatteryLevelData(
+                        mContext,
+                        null,
+                        mUserIdsSeries,
+                        /* isFromPeriodJob= */ false,
+                        /* asyncResponseDelegate= */ null);
+
+        final List<Long> expectedDailyTimestamps =
+                List.of(
+                        1640966400000L, // 2022-01-01 00:00:00
+                        1640970000000L); // 2022-01-01 01:00:00
+        final List<Integer> expectedDailyLevels = List.of(100, 66);
+        final List<List<Long>> expectedHourlyTimestamps = List.of(expectedDailyTimestamps);
+        final List<List<Integer>> expectedHourlyLevels = List.of(expectedDailyLevels);
+        verifyExpectedBatteryLevelData(
+                resultData,
+                expectedDailyTimestamps,
+                expectedDailyLevels,
+                expectedHourlyTimestamps,
+                expectedHourlyLevels);
+    }
+
+    private UsageEvents getUsageEvents(final List<UsageEvents.Event> events) {
+        UsageEvents usageEvents = new UsageEvents(events, new String[]{"package"});
+        Parcel parcel = Parcel.obtain();
+        parcel.setDataPosition(0);
+        usageEvents.writeToParcel(parcel, 0);
+        parcel.setDataPosition(0);
+        return UsageEvents.CREATOR.createFromParcel(parcel);
+    }
+
+    private UsageEvents.Event getUsageEvent(
+            final int eventType, final long timestamp, final String packageName) {
+        final UsageEvents.Event event = new UsageEvents.Event();
+        event.mEventType = eventType;
+        event.mPackage = packageName;
+        event.mTimeStamp = timestamp;
+        return event;
+    }
+
+    private static Map<Long, Map<String, BatteryHistEntry>> createHistoryMap(
+            final long[] timestamps, final int[] levels) {
+        final Map<Long, Map<String, BatteryHistEntry>> batteryHistoryMap = new HashMap<>();
+        for (int index = 0; index < timestamps.length; index++) {
+            final Map<String, BatteryHistEntry> entryMap = new HashMap<>();
+            final ContentValues values = getContentValuesWithBatteryLevel(levels[index]);
+            final BatteryHistEntry entry = new BatteryHistEntry(values);
+            entryMap.put(FAKE_ENTRY_KEY, entry);
+            batteryHistoryMap.put(timestamps[index], entryMap);
+        }
+        return batteryHistoryMap;
+    }
+
+    private static ContentValues getContentValuesWithBatteryLevel(final int level) {
+        final ContentValues values = new ContentValues();
+        final DeviceBatteryState deviceBatteryState =
+                DeviceBatteryState.newBuilder().setBatteryLevel(level).build();
+        final BatteryInformation batteryInformation =
+                BatteryInformation.newBuilder().setDeviceBatteryState(deviceBatteryState).build();
+        values.put(
+                BatteryHistEntry.KEY_BATTERY_INFORMATION,
+                ConvertUtils.convertBatteryInformationToString(batteryInformation));
+        return values;
+    }
+
+    private List<BatteryLevelData.PeriodBatteryLevelData> prepareUsageDataForSeveralDays(
+            final String packageName) throws RemoteException {
         final List<BatteryLevelData.PeriodBatteryLevelData> hourlyBatteryLevelsPerDay =
                 new ArrayList<>();
-        final String packageName = "package";
         // Adds the day 1 data.
         final List<Long> timestamps1 = List.of(2L, 3L, 4L);
         final Map<Long, Integer> batteryLevelMap1 =
@@ -190,7 +469,7 @@ public final class DataProcessManagerTest {
         events.add(event2);
         doReturn(getUsageEvents(events))
                 .when(mUsageStatsManager)
-                .queryEventsForUser(anyLong(), anyLong(), anyInt(), any());
+                .queryEventsWithFilter(any(), anyString());
         doReturn(true).when(mUserManager).isUserUnlocked(anyInt());
         // Assign current user id.
         doReturn(1).when(mContext).getUserId();
@@ -201,45 +480,45 @@ public final class DataProcessManagerTest {
         // Fake database usage data.
         final MatrixCursor cursor =
                 new MatrixCursor(
-                        new String[] {
-                            AppUsageEventEntity.KEY_APP_USAGE_EVENT_TYPE,
-                            AppUsageEventEntity.KEY_TIMESTAMP,
-                            AppUsageEventEntity.KEY_USER_ID,
-                            AppUsageEventEntity.KEY_INSTANCE_ID,
-                            AppUsageEventEntity.KEY_PACKAGE_NAME
+                        new String[]{
+                                AppUsageEventEntity.KEY_APP_USAGE_EVENT_TYPE,
+                                AppUsageEventEntity.KEY_TIMESTAMP,
+                                AppUsageEventEntity.KEY_USER_ID,
+                                AppUsageEventEntity.KEY_INSTANCE_ID,
+                                AppUsageEventEntity.KEY_PACKAGE_NAME
                         });
         // Adds fake data into the cursor.
         cursor.addRow(
-                new Object[] {
-                    AppUsageEventType.ACTIVITY_RESUMED.getNumber(),
-                    /* timestamp= */ 3,
-                    /* userId= */ 1,
-                    /* instanceId= */ 2,
-                    packageName
+                new Object[]{
+                        AppUsageEventType.ACTIVITY_RESUMED.getNumber(),
+                        /* timestamp= */ 3,
+                        /* userId= */ 1,
+                        /* instanceId= */ 2,
+                        packageName
                 });
         cursor.addRow(
-                new Object[] {
-                    AppUsageEventType.ACTIVITY_STOPPED.getNumber(),
-                    /* timestamp= */ 4,
-                    /* userId= */ 1,
-                    /* instanceId= */ 2,
-                    packageName
+                new Object[]{
+                        AppUsageEventType.ACTIVITY_STOPPED.getNumber(),
+                        /* timestamp= */ 4,
+                        /* userId= */ 1,
+                        /* instanceId= */ 2,
+                        packageName
                 });
         cursor.addRow(
-                new Object[] {
-                    AppUsageEventType.ACTIVITY_RESUMED.getNumber(),
-                    /* timestamp= */ 5,
-                    /* userId= */ 1,
-                    /* instanceId= */ 2,
-                    packageName
+                new Object[]{
+                        AppUsageEventType.ACTIVITY_RESUMED.getNumber(),
+                        /* timestamp= */ 5,
+                        /* userId= */ 1,
+                        /* instanceId= */ 2,
+                        packageName
                 });
         cursor.addRow(
-                new Object[] {
-                    AppUsageEventType.ACTIVITY_STOPPED.getNumber(),
-                    /* timestamp= */ 6,
-                    /* userId= */ 1,
-                    /* instanceId= */ 2,
-                    packageName
+                new Object[]{
+                        AppUsageEventType.ACTIVITY_STOPPED.getNumber(),
+                        /* timestamp= */ 6,
+                        /* userId= */ 1,
+                        /* instanceId= */ 2,
+                        packageName
                 });
         DatabaseUtils.sFakeSupplier =
                 new Supplier<>() {
@@ -251,21 +530,11 @@ public final class DataProcessManagerTest {
                         return mTimes <= 2 ? null : cursor;
                     }
                 };
+        return hourlyBatteryLevelsPerDay;
+    }
 
-        final DataProcessManager dataProcessManager =
-                new DataProcessManager(
-                        mContext,
-                        mUserIdsSeries,
-                        /* isFromPeriodJob= */ false,
-                        /* rawStartTimestamp= */ 2L,
-                        /* lastFullChargeTimestamp= */ 1L,
-                        /* callbackFunction= */ null,
-                        hourlyBatteryLevelsPerDay,
-                        /* batteryHistoryMap= */ new HashMap<>());
-        dataProcessManager.start();
-        mExecutorService.runAll();
-        ShadowLooper.idleMainLooper();
-
+    private void assertResultForSeveralDays(final DataProcessManager dataProcessManager,
+            final String packageName) {
         assertThat(dataProcessManager.getIsCurrentAppUsageLoaded()).isTrue();
         assertThat(dataProcessManager.getIsDatabaseAppUsageLoaded()).isTrue();
         assertThat(dataProcessManager.getIsCurrentBatteryHistoryLoaded()).isTrue();
@@ -309,159 +578,6 @@ public final class DataProcessManagerTest {
         assertThat(userMap.size()).isEqualTo(1);
         assertThat(userMap.get(packageName).size()).isEqualTo(1);
         assertAppUsagePeriod(userMap.get(packageName).get(0), 5, 6);
-    }
-
-    @Test
-    public void start_currentUserLocked_emptyAppUsageList() throws RemoteException {
-        final UsageEvents.Event event =
-                getUsageEvent(UsageEvents.Event.ACTIVITY_RESUMED, /* timestamp= */ 1, "package");
-        final List<UsageEvents.Event> events = new ArrayList<>();
-        events.add(event);
-        doReturn(getUsageEvents(events))
-                .when(mUsageStatsManager)
-                .queryEventsForUser(anyLong(), anyLong(), anyInt(), any());
-        doReturn(true).when(mUserIdsSeries).isCurrentUserLocked();
-        final MatrixCursor cursor =
-                new MatrixCursor(
-                        new String[] {
-                            AppUsageEventEntity.KEY_UID,
-                            AppUsageEventEntity.KEY_PACKAGE_NAME,
-                            AppUsageEventEntity.KEY_TIMESTAMP
-                        });
-        // Adds fake data into the cursor.
-        cursor.addRow(new Object[] {101L, "app name1", 1001L});
-        DatabaseUtils.sFakeSupplier = () -> cursor;
-
-        mDataProcessManager.start();
-        mExecutorService.runAll();
-        ShadowLooper.idleMainLooper();
-
-        assertThat(mDataProcessManager.getAppUsageEventList()).isEmpty();
-        assertThat(mDataProcessManager.getAppUsagePeriodMap()).isNull();
-        assertThat(mDataProcessManager.getShowScreenOnTime()).isFalse();
-    }
-
-    @Test
-    public void getBatteryLevelData_emptyHistoryMap_returnNull() {
-        assertThat(
-                        DataProcessManager.getBatteryLevelData(
-                                mContext,
-                                mUserIdsSeries,
-                                /* isFromPeriodJob= */ false,
-                                /* asyncResponseDelegate= */ null))
-                .isNull();
-        assertThat(
-                        DataProcessManager.getBatteryLevelData(
-                                mContext,
-                                mUserIdsSeries,
-                                /* isFromPeriodJob= */ true,
-                                /* asyncResponseDelegate= */ null))
-                .isNull();
-    }
-
-    @Test
-    public void getBatteryLevelData_allDataInOneHour_returnExpectedResult() {
-        // The timestamps and the current time are within half hour before an even hour.
-        final long[] timestamps = {
-            DateUtils.HOUR_IN_MILLIS * 2 - 300L,
-            DateUtils.HOUR_IN_MILLIS * 2 - 200L,
-            DateUtils.HOUR_IN_MILLIS * 2 - 100L
-        };
-        final int[] levels = {100, 99, 98};
-        DataProcessManager.sFakeBatteryHistoryMap = createHistoryMap(timestamps, levels);
-        DataProcessor.sTestCurrentTimeMillis = timestamps[timestamps.length - 1];
-
-        final BatteryLevelData resultData =
-                DataProcessManager.getBatteryLevelData(
-                        mContext,
-                        mUserIdsSeries,
-                        /* isFromPeriodJob= */ false,
-                        /* asyncResponseDelegate= */ null);
-
-        final List<Long> expectedDailyTimestamps =
-                List.of(DateUtils.HOUR_IN_MILLIS * 2 - 300L, DateUtils.HOUR_IN_MILLIS * 2 - 100L);
-        final List<Integer> expectedDailyLevels = List.of(100, 66);
-        final List<List<Long>> expectedHourlyTimestamps = List.of(expectedDailyTimestamps);
-        final List<List<Integer>> expectedHourlyLevels = List.of(expectedDailyLevels);
-        verifyExpectedBatteryLevelData(
-                resultData,
-                expectedDailyTimestamps,
-                expectedDailyLevels,
-                expectedHourlyTimestamps,
-                expectedHourlyLevels);
-    }
-
-    @Test
-    public void getBatteryLevelData_returnExpectedResult() {
-        // Timezone GMT+8: 2022-01-01 00:00:00, 2022-01-01 01:00:00
-        final long[] timestamps = {1640966400000L, 1640970000000L};
-        final int[] levels = {100, 99};
-        DataProcessManager.sFakeBatteryHistoryMap = createHistoryMap(timestamps, levels);
-        DataProcessor.sTestCurrentTimeMillis = timestamps[timestamps.length - 1];
-
-        final BatteryLevelData resultData =
-                DataProcessManager.getBatteryLevelData(
-                        mContext,
-                        mUserIdsSeries,
-                        /* isFromPeriodJob= */ false,
-                        /* asyncResponseDelegate= */ null);
-
-        final List<Long> expectedDailyTimestamps =
-                List.of(
-                        1640966400000L, // 2022-01-01 00:00:00
-                        1640970000000L); // 2022-01-01 01:00:00
-        final List<Integer> expectedDailyLevels = List.of(100, 66);
-        final List<List<Long>> expectedHourlyTimestamps = List.of(expectedDailyTimestamps);
-        final List<List<Integer>> expectedHourlyLevels = List.of(expectedDailyLevels);
-        verifyExpectedBatteryLevelData(
-                resultData,
-                expectedDailyTimestamps,
-                expectedDailyLevels,
-                expectedHourlyTimestamps,
-                expectedHourlyLevels);
-    }
-
-    private UsageEvents getUsageEvents(final List<UsageEvents.Event> events) {
-        UsageEvents usageEvents = new UsageEvents(events, new String[] {"package"});
-        Parcel parcel = Parcel.obtain();
-        parcel.setDataPosition(0);
-        usageEvents.writeToParcel(parcel, 0);
-        parcel.setDataPosition(0);
-        return UsageEvents.CREATOR.createFromParcel(parcel);
-    }
-
-    private UsageEvents.Event getUsageEvent(
-            final int eventType, final long timestamp, final String packageName) {
-        final UsageEvents.Event event = new UsageEvents.Event();
-        event.mEventType = eventType;
-        event.mPackage = packageName;
-        event.mTimeStamp = timestamp;
-        return event;
-    }
-
-    private static Map<Long, Map<String, BatteryHistEntry>> createHistoryMap(
-            final long[] timestamps, final int[] levels) {
-        final Map<Long, Map<String, BatteryHistEntry>> batteryHistoryMap = new HashMap<>();
-        for (int index = 0; index < timestamps.length; index++) {
-            final Map<String, BatteryHistEntry> entryMap = new HashMap<>();
-            final ContentValues values = getContentValuesWithBatteryLevel(levels[index]);
-            final BatteryHistEntry entry = new BatteryHistEntry(values);
-            entryMap.put(FAKE_ENTRY_KEY, entry);
-            batteryHistoryMap.put(timestamps[index], entryMap);
-        }
-        return batteryHistoryMap;
-    }
-
-    private static ContentValues getContentValuesWithBatteryLevel(final int level) {
-        final ContentValues values = new ContentValues();
-        final DeviceBatteryState deviceBatteryState =
-                DeviceBatteryState.newBuilder().setBatteryLevel(level).build();
-        final BatteryInformation batteryInformation =
-                BatteryInformation.newBuilder().setDeviceBatteryState(deviceBatteryState).build();
-        values.put(
-                BatteryHistEntry.KEY_BATTERY_INFORMATION,
-                ConvertUtils.convertBatteryInformationToString(batteryInformation));
-        return values;
     }
 
     private void assertAppUsageEvent(

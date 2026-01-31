@@ -16,37 +16,52 @@
 
 package com.android.settings.notification
 
+import android.Manifest.permission.MODIFY_AUDIO_SETTINGS
+import android.Manifest.permission.MODIFY_AUDIO_SETTINGS_PRIVILEGED
+import android.app.settings.SettingsEnums.ACTION_MEDIA_VOLUME
 import android.content.Context
+import android.content.pm.PackageManager.FEATURE_AUTOMOTIVE
 import android.media.AudioManager.STREAM_MUSIC
 import android.os.UserManager
 import androidx.preference.Preference
-import com.android.settings.PreferenceRestrictionMixin
 import com.android.settings.R
+import com.android.settings.contract.KEY_MEDIA_VOLUME
+import com.android.settings.metrics.PreferenceActionMetricsProvider
+import com.android.settings.restriction.PreferenceRestrictionMixin
+import com.android.settings.sound.VolumeSliderPreference
 import com.android.settingslib.datastore.KeyValueStore
 import com.android.settingslib.datastore.NoOpKeyedObservable
-import com.android.settingslib.metadata.PersistentPreference
+import com.android.settingslib.datastore.Permissions
+import com.android.settingslib.datastore.and
+import com.android.settingslib.metadata.IntRangeValuePreference
 import com.android.settingslib.metadata.PreferenceAvailabilityProvider
 import com.android.settingslib.metadata.PreferenceIconProvider
 import com.android.settingslib.metadata.PreferenceMetadata
-import com.android.settingslib.metadata.RangeValue
 import com.android.settingslib.metadata.ReadWritePermit
 import com.android.settingslib.metadata.SensitivityLevel
 import com.android.settingslib.preference.PreferenceBinding
 
 // LINT.IfChange
-open class MediaVolumePreference :
-    PreferenceMetadata,
+class MediaVolumePreference(private val audioHelper: AudioHelper) :
+    IntRangeValuePreference,
     PreferenceBinding,
-    PersistentPreference<Int>,
-    RangeValue,
+    PreferenceActionMetricsProvider,
     PreferenceAvailabilityProvider,
     PreferenceIconProvider,
     PreferenceRestrictionMixin {
+
+    constructor(context: Context) : this(AudioHelper(context))
+
     override val key: String
         get() = KEY
 
     override val title: Int
         get() = R.string.media_volume_option_title
+
+    override val preferenceActionMetrics: Int
+        get() = ACTION_MEDIA_VOLUME
+
+    override fun tags(context: Context) = arrayOf(KEY_MEDIA_VOLUME)
 
     override fun getIcon(context: Context) =
         when {
@@ -62,52 +77,56 @@ open class MediaVolumePreference :
     override val restrictionKeys
         get() = arrayOf(UserManager.DISALLOW_ADJUST_VOLUME)
 
-    override fun storage(context: Context): KeyValueStore {
-        val helper = createAudioHelper(context)
-        return object : NoOpKeyedObservable<String>(), KeyValueStore {
+    override fun storage(context: Context): KeyValueStore =
+        object : NoOpKeyedObservable<String>(), KeyValueStore {
             override fun contains(key: String) = key == KEY
 
             @Suppress("UNCHECKED_CAST")
             override fun <T : Any> getValue(key: String, valueType: Class<T>) =
-                helper.getStreamVolume(STREAM_MUSIC) as T
+                audioHelper.getStreamVolume(STREAM_MUSIC) as T
 
             override fun <T : Any> setValue(key: String, valueType: Class<T>, value: T?) {
-                helper.setStreamVolume(STREAM_MUSIC, value as Int)
+                audioHelper.setStreamVolume(STREAM_MUSIC, value as Int)
             }
         }
-    }
 
-    override fun getReadPermit(context: Context, myUid: Int, callingUid: Int) =
+    override fun getReadPermissions(context: Context) = Permissions.EMPTY
+
+    override fun getReadPermit(context: Context, callingPid: Int, callingUid: Int) =
         ReadWritePermit.ALLOW
 
-    override fun getWritePermit(context: Context, value: Int?, myUid: Int, callingUid: Int) =
+    override fun getWritePermissions(context: Context): Permissions? {
+        var permissions = Permissions.allOf(MODIFY_AUDIO_SETTINGS)
+        if (context.packageManager.hasSystemFeature(FEATURE_AUTOMOTIVE)) {
+            permissions = permissions and MODIFY_AUDIO_SETTINGS_PRIVILEGED
+        }
+        return permissions
+    }
+
+    override fun getWritePermit(context: Context, value: Int?, callingPid: Int, callingUid: Int) =
         ReadWritePermit.ALLOW
 
     override val sensitivityLevel
         get() = SensitivityLevel.NO_SENSITIVITY
 
-    override fun getMinValue(context: Context) =
-        createAudioHelper(context).getMinVolume(STREAM_MUSIC)
+    override fun getMinValue(context: Context) = audioHelper.getMinVolume(STREAM_MUSIC)
 
-    override fun getMaxValue(context: Context) =
-        createAudioHelper(context).getMaxVolume(STREAM_MUSIC)
+    override fun getMaxValue(context: Context) = audioHelper.getMaxVolume(STREAM_MUSIC)
 
-    override fun createWidget(context: Context) = VolumeSeekBarPreference(context)
+    override fun createWidget(context: Context) = VolumeSliderPreference(context)
 
     override fun bind(preference: Preference, metadata: PreferenceMetadata) {
         super.bind(preference, metadata)
-        (preference as VolumeSeekBarPreference).apply {
+        (preference as VolumeSliderPreference).apply {
             setStream(STREAM_MUSIC)
             setMuteIcon(R.drawable.ic_media_stream_off)
             setListener { updateContentDescription(this) }
         }
     }
 
-    open fun createAudioHelper(context: Context) = AudioHelper(context)
-
-    private fun updateContentDescription(preference: VolumeSeekBarPreference) {
+    private fun updateContentDescription(preference: VolumeSliderPreference) {
         when {
-            preference.isMuted ->
+            preference.isMuted() ->
                 preference.updateContentDescription(
                     preference.context.getString(
                         R.string.volume_content_description_silent_mode,

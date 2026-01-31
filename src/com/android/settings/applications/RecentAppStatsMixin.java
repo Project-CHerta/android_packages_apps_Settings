@@ -109,8 +109,15 @@ public class RecentAppStatsMixin implements LifecycleObserver, OnStart {
         mAppStatsListeners.add(listener);
     }
 
-    @VisibleForTesting
-    void loadDisplayableRecentApps(int limit) {
+    public List<RecentAppStatsMixin.UsageStatsWrapper> getRecentApps() {
+        return mRecentApps;
+    }
+
+
+    /**
+     * Loads a list of recent apps.
+     */
+    public void loadDisplayableRecentApps(int limit) {
         mRecentApps.clear();
         mCalendar = Calendar.getInstance();
         mCalendar.add(Calendar.DAY_OF_YEAR, -1);
@@ -186,7 +193,8 @@ public class RecentAppStatsMixin implements LifecycleObserver, OnStart {
             return false;
         }
 
-        if (AppUtils.isHiddenSystemModule(mContext, pkgName)) {
+        if (!android.content.pm.Flags.removeHiddenModuleUsage()
+                && AppUtils.isHiddenSystemModule(mContext, pkgName)) {
             return false;
         }
 
@@ -214,7 +222,7 @@ public class RecentAppStatsMixin implements LifecycleObserver, OnStart {
         void onReloadDataCompleted(List<UsageStatsWrapper> recentApps);
     }
 
-    static class UsageStatsWrapper {
+    public static class UsageStatsWrapper {
 
         public final UsageStats mUsageStats;
         public final int mUserId;

@@ -16,7 +16,7 @@
 
 package com.android.settings.accessibility;
 
-import static android.view.accessibility.Flags.FLAG_FORCE_INVERT_COLOR;
+import static com.android.settings.flags.Flags.FLAG_CATALYST_SETTINGS_SEARCH;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -26,6 +26,7 @@ import android.platform.test.annotations.RequiresFlagsDisabled;
 import android.platform.test.annotations.RequiresFlagsEnabled;
 import android.platform.test.flag.junit.CheckFlagsRule;
 import android.platform.test.flag.junit.DeviceFlagsValueProvider;
+import android.provider.SearchIndexableResource;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -73,20 +74,6 @@ public class ColorAndMotionFragmentTest {
     }
 
     @Test
-    @RequiresFlagsEnabled(FLAG_FORCE_INVERT_COLOR)
-    public void forceInvertEnabled_getNonIndexableKeys_existInXmlLayout() {
-        final List<String> niks = ColorAndMotionFragment.SEARCH_INDEX_DATA_PROVIDER
-                .getNonIndexableKeys(mContext);
-        final List<String> keys =
-                XmlTestUtils.getKeysFromPreferenceXml(mContext,
-                        R.xml.accessibility_color_and_motion);
-
-        assertThat(niks).doesNotContain(ColorAndMotionFragment.TOGGLE_FORCE_INVERT);
-        assertThat(keys).containsAtLeastElementsIn(niks);
-    }
-
-    @Test
-    @RequiresFlagsDisabled(FLAG_FORCE_INVERT_COLOR)
     public void getNonIndexableKeys_existInXmlLayout() {
         final List<String> niks = ColorAndMotionFragment.SEARCH_INDEX_DATA_PROVIDER
                 .getNonIndexableKeys(mContext);
@@ -94,7 +81,25 @@ public class ColorAndMotionFragmentTest {
                 XmlTestUtils.getKeysFromPreferenceXml(mContext,
                         R.xml.accessibility_color_and_motion);
 
-        assertThat(niks).contains(ColorAndMotionFragment.TOGGLE_FORCE_INVERT);
         assertThat(keys).containsAtLeastElementsIn(niks);
+    }
+
+    @RequiresFlagsDisabled(FLAG_CATALYST_SETTINGS_SEARCH)
+    @Test
+    public void getXmlResourcesToIndex_returnXmlResource() {
+        List<SearchIndexableResource> indexableResources =
+                ColorAndMotionFragment.SEARCH_INDEX_DATA_PROVIDER.getXmlResourcesToIndex(
+                        mContext, true);
+
+        assertThat(indexableResources.size()).isEqualTo(1);
+        assertThat(indexableResources.getFirst().xmlResId).isEqualTo(
+                R.xml.accessibility_color_and_motion);
+    }
+
+    @RequiresFlagsEnabled(FLAG_CATALYST_SETTINGS_SEARCH)
+    @Test
+    public void getXmlResourcesToIndex_returnNull() {
+        assertThat(ColorAndMotionFragment.SEARCH_INDEX_DATA_PROVIDER.getXmlResourcesToIndex(
+                mContext, true)).isNull();
     }
 }

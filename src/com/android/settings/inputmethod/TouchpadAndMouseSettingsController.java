@@ -18,7 +18,6 @@ package com.android.settings.inputmethod;
 
 import android.content.Context;
 import android.hardware.input.InputManager;
-import android.util.FeatureFlagUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -85,13 +84,6 @@ public class TouchpadAndMouseSettingsController extends BasePreferenceController
 
     @Override
     public int getAvailabilityStatus() {
-        boolean isFeatureOn = FeatureFlagUtils
-                .isEnabled(mContext, FeatureFlagUtils.SETTINGS_NEW_KEYBOARD_TRACKPAD);
-        boolean isTouchpad = InputPeripheralsSettingsUtils.isTouchpad();
-        boolean isPointerCustomizationEnabled =
-                android.view.flags.Flags.enableVectorCursorA11ySettings();
-        boolean isMouse = InputPeripheralsSettingsUtils.isMouse();
-        return (isFeatureOn && isTouchpad) || (isPointerCustomizationEnabled && isMouse) ? AVAILABLE
-                : CONDITIONALLY_UNAVAILABLE;
+        return CONDITIONALLY_UNAVAILABLE;
     }
 }

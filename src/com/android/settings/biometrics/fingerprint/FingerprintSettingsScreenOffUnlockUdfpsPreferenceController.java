@@ -22,6 +22,7 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.hardware.fingerprint.FingerprintManager;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.provider.Settings;
 
 import androidx.annotation.NonNull;
@@ -45,10 +46,13 @@ public class FingerprintSettingsScreenOffUnlockUdfpsPreferenceController
     @VisibleForTesting
     protected FingerprintManager mFingerprintManager;
 
+    private UserManager mUserManager;
+
     public FingerprintSettingsScreenOffUnlockUdfpsPreferenceController(
             @NonNull Context context, @NonNull String prefKey) {
         super(context, prefKey);
         mFingerprintManager = Utils.getFingerprintManagerOrNull(context);
+        mUserManager = context.getSystemService(UserManager.class);
     }
 
     @Override
@@ -59,7 +63,7 @@ public class FingerprintSettingsScreenOffUnlockUdfpsPreferenceController
             return false;
         }
         final boolean defEnabled = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_screen_off_udfps_enabled);
+                com.android.internal.R.bool.config_screen_off_udfps_default_on);
         final int value = Settings.Secure.getIntForUser(
                 mContext.getContentResolver(),
                 Settings.Secure.SCREEN_OFF_UNLOCK_UDFPS_ENABLED,
@@ -95,7 +99,10 @@ public class FingerprintSettingsScreenOffUnlockUdfpsPreferenceController
     @SuppressLint("MissingPermission")
     @Override
     public int getAvailabilityStatus() {
-        if (mFingerprintManager != null
+        if (mUserManager == null) return UNSUPPORTED_ON_DEVICE;
+        if (mUserManager.isProfile(getUserId())) {
+            return DISABLED_FOR_USER;
+        } else if (mFingerprintManager != null
                 && mFingerprintManager.isHardwareDetected()
                 && screenOffUnlockUdfps()
                 && !mFingerprintManager.isPowerbuttonFps()) {

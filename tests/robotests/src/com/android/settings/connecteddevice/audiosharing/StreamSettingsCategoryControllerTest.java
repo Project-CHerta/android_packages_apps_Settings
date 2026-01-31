@@ -36,6 +36,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.Looper;
+import android.platform.test.annotations.DisableFlags;
+import android.platform.test.annotations.EnableFlags;
 import android.platform.test.flag.junit.SetFlagsRule;
 
 import androidx.lifecycle.LifecycleOwner;
@@ -46,6 +48,7 @@ import androidx.test.core.app.ApplicationProvider;
 import com.android.settings.bluetooth.Utils;
 import com.android.settings.testutils.shadow.ShadowBluetoothAdapter;
 import com.android.settings.testutils.shadow.ShadowBluetoothUtils;
+import com.android.settingslib.bluetooth.LeAudioProfile;
 import com.android.settingslib.bluetooth.LocalBluetoothLeBroadcast;
 import com.android.settingslib.bluetooth.LocalBluetoothLeBroadcastAssistant;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
@@ -82,6 +85,7 @@ public class StreamSettingsCategoryControllerTest {
     @Spy Context mContext = ApplicationProvider.getApplicationContext();
     @Mock private LocalBluetoothManager mLocalBtManager;
     @Mock private LocalBluetoothProfileManager mBtProfileManager;
+    @Mock private LeAudioProfile mLeAudio;
     @Mock private LocalBluetoothLeBroadcast mBroadcast;
     @Mock private LocalBluetoothLeBroadcastAssistant mAssistant;
     @Mock private VolumeControlProfile mVolumeControl;
@@ -106,10 +110,12 @@ public class StreamSettingsCategoryControllerTest {
         mLifecycle = new Lifecycle(mLifecycleOwner);
         ShadowBluetoothUtils.sLocalBluetoothManager = mLocalBtManager;
         mLocalBluetoothManager = Utils.getLocalBtManager(mContext);
+        when(mBtProfileManager.getLeAudioProfile()).thenReturn(mLeAudio);
         when(mLocalBluetoothManager.getProfileManager()).thenReturn(mBtProfileManager);
         when(mBtProfileManager.getLeAudioBroadcastProfile()).thenReturn(mBroadcast);
         when(mBtProfileManager.getLeAudioBroadcastAssistantProfile()).thenReturn(mAssistant);
         when(mBtProfileManager.getVolumeControlProfile()).thenReturn(mVolumeControl);
+        when(mLeAudio.isProfileReady()).thenReturn(true);
         when(mBroadcast.isProfileReady()).thenReturn(true);
         when(mAssistant.isProfileReady()).thenReturn(true);
         when(mVolumeControl.isProfileReady()).thenReturn(true);
@@ -124,8 +130,50 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
-    public void bluetoothOff_updateVisibility() {
+    public void bluetoothOn_profileReady_updateVisibility() {
         mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
+        mShadowBluetoothAdapter.setEnabled(false);
+        mContext.registerReceiver(
+                mController.mReceiver,
+                mController.mIntentFilter,
+                Context.RECEIVER_EXPORTED_UNAUDITED);
+        mController.displayPreference(mScreen);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertThat(mPreference.isVisible()).isFalse();
+
+        mShadowBluetoothAdapter.setEnabled(true);
+        Intent intent = new Intent(BluetoothAdapter.ACTION_STATE_CHANGED);
+        intent.putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON);
+        mContext.sendBroadcast(intent);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertThat(mPreference.isVisible()).isTrue();
+    }
+
+    @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
+    public void bluetoothOn_profileNotReady_registerProfileListener() {
+        mShadowBluetoothAdapter.setEnabled(false);
+        mContext.registerReceiver(
+                mController.mReceiver,
+                mController.mIntentFilter,
+                Context.RECEIVER_EXPORTED_UNAUDITED);
+        mController.displayPreference(mScreen);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertThat(mPreference.isVisible()).isFalse();
+
+        when(mBroadcast.isProfileReady()).thenReturn(false);
+        mShadowBluetoothAdapter.setEnabled(true);
+        Intent intent = new Intent(BluetoothAdapter.ACTION_STATE_CHANGED);
+        intent.putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON);
+        mContext.sendBroadcast(intent);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertThat(mPreference.isVisible()).isFalse();
+        verify(mBtProfileManager).addServiceListener(mController);
+    }
+
+    @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
+    public void bluetoothOff_updateVisibility() {
         mContext.registerReceiver(
                 mController.mReceiver,
                 mController.mIntentFilter,
@@ -143,20 +191,20 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void getAvailabilityStatus_flagOn() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         assertThat(mController.getAvailabilityStatus()).isEqualTo(AVAILABLE);
     }
 
     @Test
+    @DisableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void getAvailabilityStatus_flagOff() {
-        mSetFlagsRule.disableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         assertThat(mController.getAvailabilityStatus()).isEqualTo(UNSUPPORTED_ON_DEVICE);
     }
 
     @Test
+    @DisableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void onStart_flagOff_doNothing() {
-        mSetFlagsRule.disableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mController.onStart(mLifecycleOwner);
         verify(mContext, times(0))
                 .registerReceiver(any(BroadcastReceiver.class), any(IntentFilter.class), anyInt());
@@ -164,8 +212,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void onStart_flagOn_registerCallback() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mController.onStart(mLifecycleOwner);
         verify(mContext)
                 .registerReceiver(any(BroadcastReceiver.class), any(IntentFilter.class), anyInt());
@@ -173,8 +221,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void onStart_flagOnProfileNotReady_registerProfileManagerCallback() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         when(mBroadcast.isProfileReady()).thenReturn(false);
         mController.onStart(mLifecycleOwner);
         verify(mContext)
@@ -183,16 +231,16 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @DisableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void onStop_flagOff_doNothing() {
-        mSetFlagsRule.disableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mController.onStop(mLifecycleOwner);
         verify(mContext, times(0)).unregisterReceiver(any(BroadcastReceiver.class));
         verify(mBtProfileManager, times(0)).removeServiceListener(mController);
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void onStop_flagOn_unregisterCallback() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         doNothing().when(mContext).unregisterReceiver(any(BroadcastReceiver.class));
         mController.onStop(mLifecycleOwner);
         verify(mContext).unregisterReceiver(any(BroadcastReceiver.class));
@@ -200,8 +248,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @DisableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void displayPreference_flagOff_preferenceInvisible() {
-        mSetFlagsRule.disableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mPreference.setVisible(true);
         mController.displayPreference(mScreen);
         shadowOf(Looper.getMainLooper()).idle();
@@ -209,8 +257,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void displayPreference_BluetoothOff_preferenceInvisible() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mPreference.setVisible(true);
         mShadowBluetoothAdapter.setEnabled(false);
         mController.displayPreference(mScreen);
@@ -219,8 +267,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void displayPreference_BluetoothOnProfileNotReady_preferenceInvisible() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mPreference.setVisible(true);
         when(mBroadcast.isProfileReady()).thenReturn(false);
         mController.displayPreference(mScreen);
@@ -229,8 +277,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void displayPreference_BluetoothOnProfileReady_preferenceVisible() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         mPreference.setVisible(false);
         mController.displayPreference(mScreen);
         shadowOf(Looper.getMainLooper()).idle();
@@ -238,8 +286,8 @@ public class StreamSettingsCategoryControllerTest {
     }
 
     @Test
+    @EnableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING)
     public void onServiceConnected_updateVisibility() {
-        mSetFlagsRule.enableFlags(Flags.FLAG_ENABLE_LE_AUDIO_SHARING);
         when(mBroadcast.isProfileReady()).thenReturn(false);
         mController.displayPreference(mScreen);
         shadowOf(Looper.getMainLooper()).idle();

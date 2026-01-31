@@ -23,7 +23,9 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
+import static org.robolectric.Shadows.shadowOf;
 
+import android.app.Application;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
@@ -31,9 +33,11 @@ import android.os.UserManager;
 
 import androidx.preference.Preference;
 import androidx.preference.PreferenceScreen;
+import androidx.test.core.app.ApplicationProvider;
 
 import com.android.settings.notification.NotificationBackend;
 import com.android.settings.testutils.shadow.SettingsShadowResources;
+import com.android.settingslib.widget.SettingsThemeHelper;
 
 import com.google.common.collect.ImmutableList;
 
@@ -70,7 +74,8 @@ public class InvalidConversationInfoPreferenceControllerTest {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        ShadowApplication shadowApplication = ShadowApplication.getInstance();
+        ShadowApplication shadowApplication =
+                shadowOf((Application) ApplicationProvider.getApplicationContext());
         shadowApplication.setSystemService(Context.NOTIFICATION_SERVICE, mNm);
         shadowApplication.setSystemService(Context.USER_SERVICE, mUm);
         mContext = RuntimeEnvironment.application;
@@ -86,6 +91,18 @@ public class InvalidConversationInfoPreferenceControllerTest {
     public void testNoCrashIfNoOnResume() {
         mController.isAvailable();
         mController.updateState(mock(Preference.class));
+    }
+
+    @Test
+    public void testIsAvailable_notIfExpressiveTheme() {
+        if (SettingsThemeHelper.isExpressiveTheme(mContext)) {
+            when(mBackend.isInInvalidMsgState(anyString(), anyInt())).thenReturn(true);
+            NotificationBackend.AppRow appRow = new NotificationBackend.AppRow();
+            appRow.pkg = "hi";
+            appRow.uid = 0;
+            mController.onResume(appRow, null, null, null, null, null, null);
+            assertFalse(mController.isAvailable());
+        }
     }
 
     @Test
@@ -111,6 +128,9 @@ public class InvalidConversationInfoPreferenceControllerTest {
 
     @Test
     public void testIsAvailable() {
+        if (SettingsThemeHelper.isExpressiveTheme(mContext)) {
+            return;
+        }
         when(mBackend.isInInvalidMsgState(anyString(), anyInt())).thenReturn(true);
         NotificationBackend.AppRow appRow = new NotificationBackend.AppRow();
         appRow.pkg = "hi";
