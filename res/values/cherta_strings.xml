@@ -151,6 +151,7 @@
     <!-- Battery Share -->
     <string name="keywords_battery_share">share, battery share</string>
     <string name="battery_share_title">Battery Share</string>
+    <string name="battery_share_switch">Use Battery Share</string>
     <string name="battery_share_summary">Charge other devices by placing them on the back of your device</string>
     <string name="battery_share_limit_title">Stop sharing battery when device reaches:</string>
     <string name="battery_share_state_on">On</string>
