@@ -27,4 +27,9 @@
     <com.android.settings.cherta.PowerShareSeekbarPreference
         android:key="battery_share_limit"
         android:title="@string/battery_share_limit_title" />
+
+    <com.android.settingslib.widget.FooterPreference
+        android:key="battery_share_footer"
+        android:title="@string/battery_share_description"
+        settings:searchable="false" />
 </PreferenceScreen>

@@ -154,6 +154,9 @@
     <string name="battery_share_switch">Use Battery Share</string>
     <string name="battery_share_summary">Charge other devices by placing them on the back of your device</string>
     <string name="battery_share_limit_title">Stop sharing battery when device reaches:</string>
+    <string name="battery_share_description">Battery Share works with compatible ear buds, phones, and more.
+
+Your phone’s battery will run out faster when using this feature. Battery Share automatically turns off after a few minutes if another device isn’t detected. For better charging, remove your phone’s case and other items that may interfere, like metal objects.</string>
     <string name="battery_share_state_on">On</string>
     <string name="battery_share_state_off">Off</string>
 </resources>
