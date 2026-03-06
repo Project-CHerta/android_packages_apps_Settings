@@ -73,13 +73,6 @@
             android:title="@string/charging_control_title"
             android:summary="@string/charging_control_summary"
             settings:controller="com.android.settings.lineage.health.ChargingControlPreferenceController" />
-
-        <Preference
-            android:fragment="com.android.settings.fuelgauge.SmartBatterySettings"
-            android:key="smart_battery_manager"
-            android:title="@string/smart_battery_manager_title"
-            settings:controller="com.android.settings.fuelgauge.batterytip.BatteryManagerPreferenceController"
-            settings:keywords="@string/keywords_battery_adaptive_preferences" />
     </com.android.settingslib.widget.UntitledPreferenceCategory>
 
     <com.android.settingslib.widget.UntitledPreferenceCategory
