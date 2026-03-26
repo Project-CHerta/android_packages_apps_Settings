@@ -130,6 +130,14 @@
         android:fragment="com.android.settings.users.UserSettings"
         settings:controller="com.android.settings.users.MultiUserPreferenceController"/>
 
+    <!-- Lab -->
+    <Preference
+        android:key="lab_settings"
+        android:title="@string/lab_settings_title"
+        android:icon="@drawable/ic_lab_settings"
+        android:order="-42"
+        android:fragment="com.android.settings.cherta.LabSettings"/>
+
     <com.android.settings.spa.preference.ComposePreference
         android:key="developer_options"
         android:order="-40"
@@ -149,12 +157,4 @@
         android:order="-30"
         android:fragment="com.android.settings.system.ResetDashboardFragment"
         settings:controller="com.android.settings.system.ResetPreferenceController"/>
-
-    <!-- Lab -->
-    <Preference
-        android:key="lab_settings"
-        android:title="@string/lab_settings_title"
-        android:icon="@drawable/ic_lab_settings"
-        android:order="-25"
-        android:fragment="com.android.settings.cherta.LabSettings"/>
 </PreferenceScreen>
